@@ -5,24 +5,20 @@ AGENT_HOME := /home/agent
 AGENTHOME := agenthome
 GOMODCACHE := gomodcache
 
-HOST_ROOT := $(CURDIR)
-CONTAINER_ROOT := /workspace
-SUBDIR ?= .
-
-PROJECT_DIR := $(CURDIR)
+REPO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+INSTALL_DIR ?= $(HOME)/.local/bin
 
 UID := $(shell id -u)
 GID := $(shell id -g)
 
-.PHONY: help volumes init-volumes build shell clean
+.PHONY: help volumes init-volumes build install clean
 
 help:
-	@echo "make volumes                       Create Docker volumes"
-	@echo "make init-volumes                  Initialize writable volume ownsership"
-	@echo "make build                         Build the agent container image"
-	@echo "make shell                         Open a shell at /work"
-	@echo "make shell SUBDIR=stories/x/branch Open a shell in a specific subdirectory"
-	@echo "make clean                         Remove Go cache volumes"
+	@echo "make volumes                     Create Docker volumes"
+	@echo "make init-volumes                Initialize writable volume ownership"
+	@echo "make build                       Build the agent container image"
+	@echo "make install [INSTALL_DIR=path]  Install the launcher scripts"
+	@echo "make clean                       Remove persistent Docker volumes"
 
 volumes:
 	@docker volume inspect $(AGENTHOME) >/dev/null 2>&1 || docker volume create $(AGENTHOME)
@@ -39,21 +35,13 @@ init-volumes: volumes
 build:
 	docker build -t $(AGENT_IMAGE) .
 
-shell: init-volumes
-	docker run --rm -it \
-		--user "$(UID):$(GID)" \
-		--cap-drop=ALL \
-		--security-opt=no-new-privileges \
-		--read-only \
-		--tmpfs /tmp:rw,size=1g,mode=1777 \
-		--tmpfs /run:rw,size=64m \
-		--mount type=bind,src="$(PROJECT_DIR)",target=/workspace \
-		--mount type=volume,src="$(AGENTHOME)",target="$(AGENT_HOME)" \
-		--mount type=volume,src="$(GOMODCACHE)",target=/go/pkg/mod \
-		-e HOME="$(AGENT_HOME)" \
-		-w "$(CONTAINER_ROOT)/$(SUBDIR)" \
-		$(AGENT_IMAGE) \
-		bash
+install:
+	@mkdir -p "$(INSTALL_DIR)"
+	@install -m 0755 "$(REPO_DIR)/bin/run-shell" "$(INSTALL_DIR)/run-shell"
+	@install -m 0755 "$(REPO_DIR)/bin/story-shell" "$(INSTALL_DIR)/story-shell"
+	@echo "Installed $(INSTALL_DIR)/story-shell"
+	@echo "Installed $(INSTALL_DIR)/run-shell"
+	@echo "Add $(INSTALL_DIR) to PATH if needed"
 
 clean:
 	-docker volume rm $(AGENTHOME)

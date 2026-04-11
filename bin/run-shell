@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  run-shell --workspace-root PATH [--subdir PATH]
+
+Launch the agent container shell.
+
+Options:
+  --workspace-root PATH
+                     Workspace root directory to mount at /workspace.
+  --host-root PATH   Deprecated alias for --workspace-root.
+  --subdir PATH      Subdirectory inside /workspace to use as the working directory.
+                     Defaults to .
+  --image NAME       Docker image name. Defaults to go-agent.
+  --agenthome NAME   Docker volume name for the agent home. Defaults to agenthome.
+  --gomodcache NAME  Docker volume name for the Go module cache. Defaults to gomodcache.
+  -h, --help         Show this help.
+
+Environment variables used as defaults:
+  WORKSPACE_ROOT, HOST_ROOT, SUBDIR, AGENT_IMAGE, AGENTHOME, GOMODCACHE
+EOF
+}
+
+workspace_root="${WORKSPACE_ROOT:-${HOST_ROOT:-}}"
+subdir="${SUBDIR:-.}"
+agent_image="${AGENT_IMAGE:-go-agent}"
+agenthome_vol="${AGENTHOME:-agenthome}"
+gomodcache_vol="${GOMODCACHE:-gomodcache}"
+agent_home="${AGENT_HOME:-/home/agent}"
+container_root="${CONTAINER_ROOT:-/workspace}"
+uid="$(id -u)"
+gid="$(id -g)"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --workspace-root|--host-root)
+      [ "$#" -ge 2 ] || { echo "error: $1 requires a path" >&2; exit 1; }
+      workspace_root="$2"
+      shift 2
+      ;;
+    --subdir)
+      [ "$#" -ge 2 ] || { echo "error: --subdir requires a path" >&2; exit 1; }
+      subdir="$2"
+      shift 2
+      ;;
+    --image)
+      [ "$#" -ge 2 ] || { echo "error: --image requires a value" >&2; exit 1; }
+      agent_image="$2"
+      shift 2
+      ;;
+    --agenthome)
+      [ "$#" -ge 2 ] || { echo "error: --agenthome requires a value" >&2; exit 1; }
+      agenthome_vol="$2"
+      shift 2
+      ;;
+    --gomodcache)
+      [ "$#" -ge 2 ] || { echo "error: --gomodcache requires a value" >&2; exit 1; }
+      gomodcache_vol="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      echo "error: unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [ -z "$workspace_root" ]; then
+  echo "error: --workspace-root is required" >&2
+  usage >&2
+  exit 1
+fi
+
+resolve_dir() {
+  (cd "$1" && pwd -P)
+}
+
+workspace_root="$(resolve_dir "$workspace_root")"
+
+if [ ! -d "$workspace_root" ]; then
+  echo "error: workspace root does not exist: $workspace_root" >&2
+  exit 1
+fi
+
+docker run --rm -it \
+  --user "$uid:$gid" \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges \
+  --read-only \
+  --tmpfs /tmp:rw,size=1g,mode=1777 \
+  --tmpfs /run:rw,size=64m \
+  --mount type=bind,src="$workspace_root",target="$container_root" \
+  --mount type=volume,src="$agenthome_vol",target="$agent_home" \
+  --mount type=volume,src="$gomodcache_vol",target=/go/pkg/mod \
+  -e HOME="$agent_home" \
+  -w "$container_root/$subdir" \
+  "$agent_image" \
+  bash

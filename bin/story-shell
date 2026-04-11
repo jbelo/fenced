@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  story-shell [--workspace-root PATH] [START_DIR]
+
+Launch the agent container for a host workspace directory.
+
+Arguments:
+  START_DIR          Directory to open inside the container. Defaults to the current directory.
+
+Options:
+  --workspace-root PATH
+                     Workspace root to mount at /workspace. If omitted, the command tries to
+                     infer it from the start directory by looking for a /stories/ path component.
+  --host-root PATH   Deprecated alias for --workspace-root.
+  -h, --help         Show this help.
+
+Examples:
+  story-shell
+  story-shell stories/my-story
+  story-shell --workspace-root /path/to/workspace/root /path/to/workspace/root/stories/my-story/api
+EOF
+}
+
+workspace_root="${WORKSPACE_ROOT:-${HOST_ROOT:-}}"
+start_dir=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --workspace-root|--host-root)
+      [ "$#" -ge 2 ] || { echo "error: $1 requires a path" >&2; exit 1; }
+      workspace_root="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "error: unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      if [ -n "$start_dir" ]; then
+        echo "error: too many positional arguments" >&2
+        usage >&2
+        exit 1
+      fi
+      start_dir="$1"
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$start_dir" ]; then
+  start_dir="$PWD"
+fi
+
+resolve_dir() {
+  (cd "$1" && pwd -P)
+}
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+run_shell="$script_dir/run-shell"
+
+start_dir="$(resolve_dir "$start_dir")"
+
+if [ ! -d "$start_dir" ]; then
+  echo "error: start directory does not exist: $start_dir" >&2
+  exit 1
+fi
+
+if [ -z "$workspace_root" ]; then
+  case "$start_dir" in
+    */stories/*)
+      workspace_root="${start_dir%%/stories/*}"
+      ;;
+    *)
+      cat >&2 <<EOF
+error: could not infer WORKSPACE_ROOT from:
+  $start_dir
+
+Pass --workspace-root PATH (or set WORKSPACE_ROOT) so the command can compute the workspace path.
+EOF
+      exit 1
+      ;;
+  esac
+fi
+
+workspace_root="$(resolve_dir "$workspace_root")"
+
+if [ ! -d "$workspace_root" ]; then
+  echo "error: workspace root does not exist: $workspace_root" >&2
+  exit 1
+fi
+
+case "$start_dir" in
+  "$workspace_root")
+    subdir="."
+    ;;
+  "$workspace_root"/*)
+    subdir="${start_dir#$workspace_root/}"
+    ;;
+  *)
+    cat >&2 <<EOF
+error: start directory is outside the workspace root:
+  workspace root: $workspace_root
+  start dir:      $start_dir
+EOF
+    exit 1
+    ;;
+esac
+
+if [ ! -x "$run_shell" ]; then
+  echo "error: run-shell not found next to story-shell: $run_shell" >&2
+  exit 1
+fi
+
+exec "$run_shell" --workspace-root "$workspace_root" --subdir "$subdir"

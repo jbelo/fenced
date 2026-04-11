@@ -11,7 +11,7 @@ The goal is to keep the agent fenced inside a limited project mount instead of r
   - Node.js 24
   - `@mariozechner/pi-coding-agent`
   - common CLI tools (`git`, `bash`, `vim`, `curl`)
-- A `Makefile` for building and launching the environment
+- A `Makefile` for building, installing, and maintaining the environment
 - Persistent Docker volumes for:
   - the agent home directory
   - the Go module cache
@@ -37,7 +37,7 @@ Work is organized per story under:
 stories/<story>/
 ```
 
-Each story workspace can contain:
+Each `STORY_ROOT` can contain:
 
 - story-specific context and notes
 - one or more Git worktrees created for that story
@@ -50,38 +50,38 @@ The expected workflow is:
 4. Launch the container shell in that story workspace
 5. Run the coding harness from there
 
-The `SUBDIR` make variable is used to start the shell in the desired story workspace.
+The launcher scripts determine the story workspace to open inside the container. `WORKSPACE_ROOT` selects which host directory is mounted at `/workspace`, `STORY_ROOT` refers to a per-story directory under `stories/<story>/`, and `SUBDIR` selects where inside the mounted workspace the shell starts.
 
 ## Why `SUBDIR` matters
 
-The full host project root is mounted into the container at `/workspace`, but the shell starts in a chosen subdirectory.
+The full `WORKSPACE_ROOT` is mounted into the container at `/workspace`, but the shell starts in a chosen subdirectory.
 
 This distinction supports a layout where:
 
-- the mounted host root contains the broader project area
-- the active task is performed inside `stories/<story>/...`
+- the mounted `WORKSPACE_ROOT` contains the broader project area
+- the active task is performed inside a `STORY_ROOT` at `stories/<story>/...`
 - Git worktrees and story context live together inside that story workspace
 
-Example:
+Example when invoking the low-level launcher directly:
 
 ```sh
-make shell SUBDIR=stories/my-story
+run-shell --workspace-root /path/to/workspace/root --subdir stories/my-story
 ```
 
 ## Git worktree notes
 
-Git worktrees created inside story workspaces should use relative links so that the host-side layout and the container-side layout remain consistent.
+Git worktrees created inside story workspaces must use relative paths.
 
-Because the same workspace tree is used both:
+This is required so that the worktree metadata resolves correctly both:
 
 - on the host
 - and inside the container under `/workspace`
 
-relative linking helps ensure the worktrees resolve correctly in both places.
+Because the same workspace tree is used in both places, absolute host paths in worktree links will not match the container path layout. Relative links keep the worktrees valid in both environments.
 
 ## Persistent volumes
 
-Two Docker volumes are used so data survives across `make shell` invocations:
+Two Docker volumes are used so data survives across shell invocations:
 
 - `agenthome`: persistent home directory for the coding agent
 - `gomodcache`: persistent Go module cache
@@ -115,25 +115,66 @@ make init-volumes
 
 After this initial setup, the environment can be reused for later sessions.
 
+## Launcher installation
+
+Because this environment repository is separate from the `WORKSPACE_ROOT` that contains `stories/<story>/...`, day-to-day usage happens through installed scripts rather than through `make`.
+
+Install the launcher scripts:
+
+```sh
+make install
+```
+
+By default this installs standalone copies at:
+
+```text
+~/.local/bin/story-shell
+~/.local/bin/run-shell
+```
+
+Override the install location if needed:
+
+```sh
+make install INSTALL_DIR=/custom/bin
+```
+
+Make sure the install directory is on your `PATH`.
+
 ## Daily usage
 
-Open a shell in the default project root:
+From inside a story workspace, run:
 
 ```sh
-make shell
+story-shell
 ```
 
-Open a shell in a story workspace:
+This launcher:
+
+- infers `WORKSPACE_ROOT` from the path prefix before `stories/` when possible
+- computes the relative `SUBDIR`
+- invokes the installed `run-shell` helper next to it
+
+The installed scripts do not depend on this repository remaining in the same location after installation.
+
+You can also provide a specific start directory explicitly:
 
 ```sh
-make shell SUBDIR=stories/<story>
+story-shell /path/to/host/root/stories/<story>/<worktree>
 ```
 
-Open a shell in a specific worktree inside a story workspace:
+Or provide the workspace root yourself:
 
 ```sh
-make shell SUBDIR=stories/<story>/<worktree>
+story-shell --workspace-root /path/to/workspace/root /path/to/workspace/root/stories/<story>
 ```
+
+If you prefer to invoke the low-level launcher directly, pass both values explicitly:
+
+```sh
+run-shell --workspace-root /path/to/workspace/root --subdir stories/<story>/<worktree>
+```
+
+`story-shell` is the convenience wrapper. `run-shell` is the low-level launcher that performs the actual `docker run`.
 
 ## Cleanup
 
