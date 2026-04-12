@@ -17,10 +17,12 @@ Options:
   --image NAME       Docker image name. Defaults to go-agent.
   --agenthome NAME   Docker volume name for the agent home. Defaults to agenthome.
   --gomodcache NAME  Docker volume name for the Go module cache. Defaults to gomodcache.
+  --no-egress-proxy  Disable the Squid egress proxy for this session.
   -h, --help         Show this help.
 
 Environment variables used as defaults:
-  WORKSPACE_ROOT, HOST_ROOT, SUBDIR, AGENT_IMAGE, AGENTHOME, GOMODCACHE
+  WORKSPACE_ROOT, HOST_ROOT, SUBDIR, AGENT_IMAGE, AGENTHOME, GOMODCACHE,
+  EGRESS_PROXY_ENABLE, AGENT_INTERNAL_NETWORK, EGRESS_PROXY_URL, NO_PROXY
 EOF
 }
 
@@ -31,6 +33,10 @@ agenthome_vol="${AGENTHOME:-agenthome}"
 gomodcache_vol="${GOMODCACHE:-gomodcache}"
 agent_home="${AGENT_HOME:-/home/agent}"
 container_root="${CONTAINER_ROOT:-/workspace}"
+egress_proxy_enable="${EGRESS_PROXY_ENABLE:-1}"
+agent_internal_network="${AGENT_INTERNAL_NETWORK:-go-agent-internal-net}"
+egress_proxy_url="${EGRESS_PROXY_URL:-http://go-agent-egress-proxy:3128}"
+no_proxy_value="${NO_PROXY:-localhost,127.0.0.1}"
 uid="$(id -u)"
 gid="$(id -g)"
 
@@ -60,6 +66,10 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || { echo "error: --gomodcache requires a value" >&2; exit 1; }
       gomodcache_vol="$2"
       shift 2
+      ;;
+    --no-egress-proxy)
+      egress_proxy_enable=0
+      shift
       ;;
     -h|--help)
       usage
@@ -94,17 +104,50 @@ if [ ! -d "$workspace_root" ]; then
   exit 1
 fi
 
-docker run --rm -it \
-  --user "$uid:$gid" \
-  --cap-drop=ALL \
-  --security-opt=no-new-privileges \
-  --read-only \
-  --tmpfs /tmp:rw,size=1g,mode=1777 \
-  --tmpfs /run:rw,size=64m \
-  --mount type=bind,src="$workspace_root",target="$container_root" \
-  --mount type=volume,src="$agenthome_vol",target="$agent_home" \
-  --mount type=volume,src="$gomodcache_vol",target=/go/pkg/mod \
-  -e HOME="$agent_home" \
-  -w "$container_root/$subdir" \
+if [ "$egress_proxy_enable" != "0" ]; then
+  if ! docker network inspect "$agent_internal_network" >/dev/null 2>&1; then
+    cat >&2 <<EOF
+error: agent internal network does not exist: $agent_internal_network
+
+Create and start the proxy first:
+  make egress-init
+
+Or bypass the proxy for this shell:
+  run-shell --no-egress-proxy --workspace-root "$workspace_root"
+EOF
+    exit 1
+  fi
+fi
+
+docker_args=(
+  --rm
+  -it
+  --user "$uid:$gid"
+  --cap-drop=ALL
+  --security-opt=no-new-privileges
+  --read-only
+  --tmpfs /tmp:rw,size=1g,mode=1777
+  --tmpfs /run:rw,size=64m
+  --mount "type=bind,src=$workspace_root,target=$container_root"
+  --mount "type=volume,src=$agenthome_vol,target=$agent_home"
+  --mount "type=volume,src=$gomodcache_vol,target=/go/pkg/mod"
+  -e "HOME=$agent_home"
+  -w "$container_root/$subdir"
+)
+
+if [ "$egress_proxy_enable" != "0" ]; then
+  docker_args+=(
+    --network "$agent_internal_network"
+    -e "HTTP_PROXY=$egress_proxy_url"
+    -e "HTTPS_PROXY=$egress_proxy_url"
+    -e "http_proxy=$egress_proxy_url"
+    -e "https_proxy=$egress_proxy_url"
+    -e "NO_PROXY=$no_proxy_value"
+    -e "no_proxy=$no_proxy_value"
+    -e NODE_USE_ENV_PROXY=1
+  )
+fi
+
+exec docker run "${docker_args[@]}" \
   "$agent_image" \
   bash
