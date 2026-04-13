@@ -1,9 +1,11 @@
 # Sandboxed Go Project Agent Environment
 
-This repository provides a Docker-based environment for running the coding agent against Go project workspaces with two goals:
+This repository provides a Docker-based environment for running a coding agent against Go project workspaces with two goals:
 
 - **internal containment**: limit what the agent can read and write from the host
 - **external egress control**: route outbound Internet access through a controlled proxy
+
+It currently targets [Pi](https://pi.dev/), but the overall harness shape should be easy to adapt to other coding-agent CLIs and containerized agent runtimes.
 
 The agent does not run directly on the developer machine. Instead, it runs inside a constrained container with a limited workspace mount and proxy-mediated network access.
 
@@ -134,6 +136,39 @@ make install INSTALL_DIR=/custom/bin
 
 Make sure the install directory is on your `PATH`.
 
+## Authentication note
+
+If `/login` inside the container is awkward or unreliable, a practical workaround is to reuse an existing `auth.json` created by Codex CLI on the host.
+
+Typical approach:
+
+1. authenticate once on the host with the CLI that already works for you
+2. locate the generated `auth.json` on the host
+3. copy it into the persistent agent home volume so it appears in the container under the agent user's home directory
+
+For example, if you already have a working Codex CLI credential on the host, the typical source location is:
+
+```text
+~/.codex/auth.json
+```
+
+Copy that host-side credential file into Pi's config directory inside the container home:
+
+```text
+$HOME/.pi/agent/auth.json
+```
+
+Because `/home/agent` is backed by the persistent `agenthome` Docker volume, credentials placed there survive across shell sessions.
+
+Use this carefully:
+
+- treat `auth.json` as a secret
+- do not commit it into the workspace or repository
+- prefer copying it into the agent home volume rather than into `/workspace`
+- ensure file permissions are restricted to the agent user where possible
+
+Depending on the specific agent CLI, the expected auth path may differ, but the same pattern applies: place the working host-generated auth material into the persistent container home instead of relying on interactive login inside the container.
+
 ## Usage
 
 From inside a story workspace:
@@ -172,6 +207,20 @@ If you explicitly want a shell without the proxy:
 ```sh
 run-shell --no-egress-proxy --workspace-root /path/to/workspace/root --subdir stories/<story>/<worktree>
 ```
+
+The launcher also prepares a user-local npm install path in the writable home volume:
+
+- `NPM_CONFIG_PREFIX=$HOME/.local`
+- `PATH` is prefixed with `$HOME/.local/bin`
+
+This lets you override the image-baked Pi install without rebuilding the image:
+
+```sh
+npm install -g @mariozechner/pi-coding-agent@latest
+which pi
+```
+
+The user-local install in `$HOME/.local/bin` will take precedence over the image-installed binary.
 
 ## Egress proxy operations
 

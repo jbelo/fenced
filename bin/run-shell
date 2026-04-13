@@ -149,5 +149,6 @@ if [ "$egress_proxy_enable" != "0" ]; then
 fi
 
 exec docker run "${docker_args[@]}" \
+  -e "NPM_CONFIG_PREFIX=$agent_home/.local" \
   "$agent_image" \
-  bash
+  bash -lc 'export PATH="$HOME/.local/bin:$PATH"; exec bash'
