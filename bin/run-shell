@@ -103,6 +103,16 @@ if [ ! -d "$workspace_root" ]; then
   exit 1
 fi
 
+container_name_suffix="$(basename "$subdir")"
+if [ "$container_name_suffix" = "." ] || [ -z "$container_name_suffix" ]; then
+  container_name_suffix="$(basename "$workspace_root")"
+fi
+container_name_suffix="$(printf '%s' "$container_name_suffix" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_.-]/-/g; s/^-*//; s/-*$//')"
+if [ -z "$container_name_suffix" ]; then
+  container_name_suffix="workspace"
+fi
+container_name="go-agent-${container_name_suffix}"
+
 if [ "$egress_proxy_enable" != "0" ]; then
   if ! docker network inspect "$agent_internal_network" >/dev/null 2>&1; then
     cat >&2 <<EOF
@@ -121,6 +131,7 @@ fi
 docker_args=(
   --rm
   -it
+  --name "$container_name"
   --user "$uid:$gid"
   --cap-drop=ALL
   --security-opt=no-new-privileges
