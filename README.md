@@ -121,6 +121,12 @@ This will:
 - create `go-agent-internal-net` and `go-agent-upstream-net`, then start `go-agent-egress-proxy`
 - install `story-shell` and `run-shell`
 
+Build the repo-owned Squid proxy image when needed:
+
+```sh
+make egress-proxy-build
+```
+
 By default the launchers are installed to:
 
 ```text
@@ -213,6 +219,8 @@ The launcher also prepares a user-local npm install path in the writable home vo
 - `NPM_CONFIG_PREFIX=$HOME/.local`
 - `PATH` is prefixed with `$HOME/.local/bin`
 
+The proxy allowlist includes npm registry access so user-local npm installs can work through Squid.
+
 This lets you override the image-baked Pi install without rebuilding the image:
 
 ```sh
@@ -227,7 +235,10 @@ The user-local install in `$HOME/.local/bin` will take precedence over the image
 Available targets:
 
 - `make networks` (creates `go-agent-internal-net` as internal and `go-agent-upstream-net` as outbound-capable)
+- `make egress-proxy-build`
 - `make egress-proxy-up`
+
+`make egress-proxy-up` starts the proxy container but does not rebuild the image automatically. Re-run `make egress-proxy-build` when `Dockerfile.squid` changes.
 - `make egress-proxy-down`
 - `make egress-proxy-logs`
 - `make egress-init`
@@ -237,6 +248,7 @@ Current Squid allowlist covers CONNECT access to:
 
 - `*.openai.com`
 - `*.chatgpt.com`
+- `*.npmjs.org` (including `registry.npmjs.org`)
 
 Validate the setup:
 
@@ -249,6 +261,12 @@ Tail proxy logs:
 ```sh
 make egress-proxy-logs
 ```
+
+`make egress-proxy-logs` tails Squid's access and cache logs from inside the running proxy container.
+
+This setup runs Squid as the non-privileged `proxy` user and prepares the required runtime and log directories in the repo-owned proxy image.
+
+The proxy runs from a small repo-owned image defined in `Dockerfile.squid` rather than relying on upstream container entrypoint behavior.
 
 ## Task tracking
 

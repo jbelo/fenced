@@ -11,13 +11,14 @@ INSTALL_DIR ?= $(HOME)/.local/bin
 AGENT_INTERNAL_NETWORK := go-agent-internal-net
 PROXY_UPSTREAM_NETWORK := go-agent-upstream-net
 EGRESS_PROXY_CONTAINER := go-agent-egress-proxy
-SQUID_IMAGE ?= ubuntu/squid:latest
+EGRESS_PROXY_IMAGE := go-agent-egress-proxy-image
 SQUID_CONF := $(REPO_DIR)/squid.conf
+PROXY_DOCKERFILE := $(REPO_DIR)/Dockerfile.squid
 
 UID := $(shell id -u)
 GID := $(shell id -g)
 
-.PHONY: help volumes init-volumes build install networks egress-proxy-up egress-proxy-down egress-proxy-logs egress-init egress-verify clean
+.PHONY: help volumes init-volumes build install networks egress-proxy-build egress-proxy-up egress-proxy-down egress-proxy-logs egress-init egress-verify clean
 
 help:
 	@echo "make build                       Build the agent container image"
@@ -25,6 +26,7 @@ help:
 	@echo "make init-volumes                Initialize writable volume ownership"
 	@echo "make install [INSTALL_DIR=path]  Install the launcher scripts"
 	@echo "make networks                    Create the internal agent network and proxy upstream network"
+	@echo "make egress-proxy-build          Build the Squid egress proxy image"
 	@echo "make egress-proxy-up             Start the Squid egress proxy"
 	@echo "make egress-proxy-down           Stop and remove the Squid egress proxy"
 	@echo "make egress-proxy-logs           Tail Squid proxy logs"
@@ -59,13 +61,16 @@ networks:
 	@docker network inspect $(AGENT_INTERNAL_NETWORK) >/dev/null 2>&1 || docker network create --internal $(AGENT_INTERNAL_NETWORK)
 	@docker network inspect $(PROXY_UPSTREAM_NETWORK) >/dev/null 2>&1 || docker network create $(PROXY_UPSTREAM_NETWORK)
 
+egress-proxy-build:
+	docker build -t $(EGRESS_PROXY_IMAGE) -f $(PROXY_DOCKERFILE) $(REPO_DIR)
+
 egress-proxy-up: networks
 	@docker rm -f $(EGRESS_PROXY_CONTAINER) >/dev/null 2>&1 || true
 	docker run -d \
 		--name $(EGRESS_PROXY_CONTAINER) \
 		--network $(PROXY_UPSTREAM_NETWORK) \
 		--mount type=bind,src="$(SQUID_CONF)",target=/etc/squid/squid.conf,readonly \
-		$(SQUID_IMAGE)
+		$(EGRESS_PROXY_IMAGE)
 	docker network connect $(AGENT_INTERNAL_NETWORK) $(EGRESS_PROXY_CONTAINER)
 
 egress-proxy-down:
@@ -73,7 +78,7 @@ egress-proxy-down:
 	-docker rm $(EGRESS_PROXY_CONTAINER)
 
 egress-proxy-logs:
-	docker logs -f $(EGRESS_PROXY_CONTAINER)
+	docker exec -it $(EGRESS_PROXY_CONTAINER) sh -lc 'touch /var/log/squid/access.log /var/log/squid/cache.log && tail -n +1 -f /var/log/squid/access.log /var/log/squid/cache.log'
 
 egress-init: networks egress-proxy-up
 
