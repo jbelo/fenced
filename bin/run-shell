@@ -9,9 +9,8 @@ Usage:
 Launch the agent container shell.
 
 Options:
-  --workspace-root PATH
+  --workspace-root PATH, --host-root PATH
                      Workspace root directory to mount at /workspace.
-  --host-root PATH   Deprecated alias for --workspace-root.
   --subdir PATH      Subdirectory inside /workspace to use as the working directory.
                      Defaults to .
   --image NAME       Docker image name. Defaults to go-agent.

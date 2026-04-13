@@ -12,10 +12,9 @@ Arguments:
   START_DIR          Directory to open inside the container. Defaults to the current directory.
 
 Options:
-  --workspace-root PATH
+  --workspace-root PATH, --host-root PATH
                      Workspace root to mount at /workspace. If omitted, the command tries to
                      infer it from the start directory by looking for a /stories/ path component.
-  --host-root PATH   Deprecated alias for --workspace-root.
   -h, --help         Show this help.
 
 Examples:
