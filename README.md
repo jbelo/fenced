@@ -5,7 +5,7 @@ This repository provides a Docker-based environment for running a coding agent a
 - **internal containment**: limit what the agent can read and write from the host
 - **external egress control**: route outbound Internet access through a controlled proxy
 
-It currently targets [Pi](https://pi.dev/), but the overall harness shape should be easy to adapt to other coding-agent CLIs and containerized agent runtimes.
+It currently targets [Pi](https://pi.dev/) and is also customized for OpenAI / Codex CLI model access, but the overall harness shape should be easy to adapt to other coding-agent CLIs and model backends.
 
 The agent does not run directly on the developer machine. Instead, it runs inside a constrained container with a limited workspace mount and proxy-mediated network access.
 
