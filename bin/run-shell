@@ -161,4 +161,4 @@ fi
 exec docker run "${docker_args[@]}" \
   -e "NPM_CONFIG_PREFIX=$agent_home/.local" \
   "$agent_image" \
-  bash -lc 'export PATH="$HOME/.local/bin:$PATH"; exec bash'
+  bash -c 'export PATH="$HOME/.local/bin:$PATH"; exec bash'

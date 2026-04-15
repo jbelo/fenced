@@ -214,7 +214,7 @@ If you explicitly want a shell without the proxy:
 run-shell --no-egress-proxy --workspace-root /path/to/workspace/root --subdir stories/<story>/<worktree>
 ```
 
-The launcher also prepares a user-local npm install path in the writable home volume:
+The launcher also prepares a user-local npm install path in the writable home volume without replacing the image's existing toolchain `PATH` entries (such as Go):
 
 - `NPM_CONFIG_PREFIX=$HOME/.local`
 - `PATH` is prefixed with `$HOME/.local/bin`
