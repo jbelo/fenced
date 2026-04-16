@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  story-shell [--workspace-root PATH] [START_DIR]
+  story-shell [--workspace-root PATH] [--image NAME] [START_DIR]
 
 Launch the agent container for a host workspace directory.
 
@@ -15,6 +15,7 @@ Options:
   --workspace-root PATH, --host-root PATH
                      Workspace root to mount at /workspace. If omitted, the command tries to
                      infer it from the start directory by looking for a /stories/ path component.
+  --image NAME       Docker image name to pass through to run-shell.
   -h, --help         Show this help.
 
 Examples:
@@ -25,6 +26,7 @@ EOF
 }
 
 workspace_root="${WORKSPACE_ROOT:-${HOST_ROOT:-}}"
+agent_image="${AGENT_IMAGE:-}"
 start_dir=""
 
 while [ "$#" -gt 0 ]; do
@@ -32,6 +34,11 @@ while [ "$#" -gt 0 ]; do
     --workspace-root|--host-root)
       [ "$#" -ge 2 ] || { echo "error: $1 requires a path" >&2; exit 1; }
       workspace_root="$2"
+      shift 2
+      ;;
+    --image)
+      [ "$#" -ge 2 ] || { echo "error: --image requires a value" >&2; exit 1; }
+      agent_image="$2"
       shift 2
       ;;
     -h|--help)
@@ -121,6 +128,10 @@ esac
 if [ ! -x "$run_shell" ]; then
   echo "error: run-shell not found next to story-shell: $run_shell" >&2
   exit 1
+fi
+
+if [ -n "$agent_image" ]; then
+  exec "$run_shell" --workspace-root "$workspace_root" --subdir "$subdir" --image "$agent_image"
 fi
 
 exec "$run_shell" --workspace-root "$workspace_root" --subdir "$subdir"

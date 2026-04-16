@@ -189,6 +189,18 @@ You can also launch a specific directory explicitly:
 story-shell /path/to/host/root/stories/<story>/<worktree>
 ```
 
+If you need a different agent image, pass it through directly:
+
+```sh
+story-shell --image go-agent-fdb
+```
+
+The low-level launcher supports the same image override:
+
+```sh
+run-shell --image go-agent-fdb --workspace-root /path/to/workspace/root --subdir stories/<story>/<worktree>
+```
+
 Or invoke the low-level launcher directly:
 
 ```sh
@@ -267,6 +279,14 @@ make egress-proxy-logs
 This setup runs Squid as the non-privileged `proxy` user and prepares the required runtime and log directories in the repo-owned proxy image.
 
 The proxy runs from a small repo-owned image defined in `Dockerfile.squid` rather than relying on upstream container entrypoint behavior.
+
+## Optional addons
+
+Optional, project-specific integrations live under `extras/`.
+
+Current addon:
+
+- `extras/foundationdb/README.md` — run a FoundationDB container on the internal agent network and optionally build an agent image with FoundationDB client libraries
 
 ## Task tracking
 
