@@ -7,13 +7,17 @@ FDB_DATA_VOLUME ?= go-agent-fdb-data
 FDB_PORT ?= 4500
 FDB_SOURCE ?=
 FDB_DOCKER_RUN_EXTRA ?=
+FDB_CLUSTER_SOURCE ?= /var/fdb/fdb.cluster
 
 AGENT_INTERNAL_NETWORK ?= go-agent-internal-net
 AGENT_IMAGE ?= go-agent
+AGENTHOME ?= agenthome
+AGENT_HOME ?= /home/agent
+FDB_CLUSTER_DEST ?= $(AGENT_HOME)/.fdb.cluster
 AGENT_FDB_IMAGE ?= go-agent-fdb
 AGENT_FDB_DOCKERFILE ?= $(ROOT_DIR)/extras/foundationdb/Dockerfile.agent-fdb
 
-.PHONY: help networks fdb-image-build-source fdb-up fdb-down fdb-init fdb-cli fdb-logs fdb-clean-data agent-fdb-build
+.PHONY: help networks fdb-image-build-source fdb-up fdb-down fdb-init fdb-cli fdb-logs fdb-cluster-show fdb-cluster-install-agenthome fdb-clean-data agent-fdb-build
 
 help:
 	@echo "make -f extras/foundationdb/Makefile fdb-image-build-source FDB_SOURCE=/path/to/foundationdb [FDB_VERSION=7.3.68]"
@@ -22,6 +26,8 @@ help:
 	@echo "make -f extras/foundationdb/Makefile fdb-init"
 	@echo "make -f extras/foundationdb/Makefile fdb-cli"
 	@echo "make -f extras/foundationdb/Makefile fdb-logs"
+	@echo "make -f extras/foundationdb/Makefile fdb-cluster-show"
+	@echo "make -f extras/foundationdb/Makefile fdb-cluster-install-agenthome"
 	@echo "make -f extras/foundationdb/Makefile fdb-clean-data"
 	@echo "make -f extras/foundationdb/Makefile agent-fdb-build"
 
@@ -59,6 +65,18 @@ fdb-cli:
 
 fdb-logs:
 	docker logs -f $(FDB_CONTAINER)
+
+fdb-cluster-show:
+	docker exec $(FDB_CONTAINER) cat $(FDB_CLUSTER_SOURCE)
+
+fdb-cluster-install-agenthome:
+	docker exec $(FDB_CONTAINER) cat $(FDB_CLUSTER_SOURCE) | \
+		docker run --rm -i \
+			--mount type=volume,src=$(AGENTHOME),target=$(AGENT_HOME) \
+			$(AGENT_IMAGE) \
+			sh -lc 'mkdir -p "$$(dirname "$(FDB_CLUSTER_DEST)")" && cat > "$(FDB_CLUSTER_DEST)"'
+	@echo "Installed cluster file to $(FDB_CLUSTER_DEST) in volume $(AGENTHOME)"
+	@echo "In the agent shell, run: export FDB_CLUSTER_FILE=$(FDB_CLUSTER_DEST)"
 
 fdb-clean-data:
 	-docker volume rm $(FDB_DATA_VOLUME)

@@ -97,19 +97,46 @@ fdbcli --exec "configure new single memory"
 
 inside the running container.
 
-## 4. Open `fdbcli`
+## 4. Make the cluster file available to the agent shell
+
+The FoundationDB client tools need a cluster file. In this setup the server-side cluster file lives at `/var/fdb/fdb.cluster`. You can inspect it with:
+
+```sh
+make -f extras/foundationdb/Makefile fdb-cluster-show
+```
+
+To install that cluster file into the persistent `agenthome` volume for the agent user:
+
+```sh
+make -f extras/foundationdb/Makefile fdb-cluster-install-agenthome
+```
+
+This writes the file to:
+
+```text
+/home/agent/.fdb.cluster
+```
+
+Inside the agent shell, point `fdbcli` at it:
+
+```sh
+export FDB_CLUSTER_FILE=$HOME/.fdb.cluster
+fdbcli
+```
+
+## 5. Open `fdbcli` inside the database container
 
 ```sh
 make -f extras/foundationdb/Makefile fdb-cli
 ```
 
-## 5. Tail database logs
+## 6. Tail database logs
 
 ```sh
 make -f extras/foundationdb/Makefile fdb-logs
 ```
 
-## 6. Build an agent image with FoundationDB client libraries
+## 7. Build an agent image with FoundationDB client libraries
 
 If your tests require FoundationDB client libraries inside the agent container, build the derived image with the desired FoundationDB version:
 
@@ -157,8 +184,12 @@ go-agent-fdb:4500
 make networks
 make -f extras/foundationdb/Makefile fdb-up FDB_VERSION=7.3.68
 make -f extras/foundationdb/Makefile fdb-init
-make -f extras/foundationdb/Makefile agent-fdb-build
+make -f extras/foundationdb/Makefile fdb-cluster-install-agenthome
+make -f extras/foundationdb/Makefile agent-fdb-build FDB_VERSION=7.3.68
 story-shell --image go-agent-fdb
+# inside the shell:
+export FDB_CLUSTER_FILE=$HOME/.fdb.cluster
+fdbcli
 ```
 
 ## Cleanup

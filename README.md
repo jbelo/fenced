@@ -286,7 +286,7 @@ Optional, project-specific integrations live under `extras/`.
 
 Current addon:
 
-- `extras/foundationdb/README.md` — run a FoundationDB container on the internal agent network and optionally build an agent image with FoundationDB client libraries
+- `extras/foundationdb/README.md` — run a FoundationDB container on the internal agent network, install the cluster file into `agenthome`, and optionally build an agent image with FoundationDB client libraries
 
 ## Task tracking
 
