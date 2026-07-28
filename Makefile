@@ -14,16 +14,19 @@ EGRESS_PROXY_CONTAINER := go-agent-egress-proxy
 EGRESS_PROXY_IMAGE := go-agent-egress-proxy-image
 SQUID_CONF := $(REPO_DIR)/squid.conf
 PROXY_DOCKERFILE := $(REPO_DIR)/Dockerfile.squid
+AGENT_CONTEXT_SOURCE := $(REPO_DIR)/agent-context.md
+AGENT_CONTEXT_DEST := $(AGENT_HOME)/.go-agent-harness.md
 
 UID := $(shell id -u)
 GID := $(shell id -g)
 
-.PHONY: help volumes init-volumes build install networks egress-proxy-build egress-proxy-up egress-proxy-down egress-proxy-logs egress-init egress-verify clean
+.PHONY: help volumes init-volumes install-agent-context build install networks egress-proxy-build egress-proxy-up egress-proxy-down egress-proxy-logs egress-init egress-verify clean
 
 help:
 	@echo "make build                       Build the agent container image"
 	@echo "make volumes                     Create Docker volumes"
 	@echo "make init-volumes                Initialize writable volume ownership"
+	@echo "make install-agent-context       Install harness context into the agent home volume"
 	@echo "make install [INSTALL_DIR=path]  Install the launcher scripts"
 	@echo "make networks                    Create the internal agent network and proxy upstream network"
 	@echo "make egress-proxy-build          Build the Squid egress proxy image"
@@ -48,6 +51,16 @@ init-volumes: volumes
 		--mount type=volume,src="$(GOMODCACHE)",target=/go/pkg/mod \
 		$(AGENT_IMAGE) \
 		sh -lc 'mkdir -p "$(AGENT_HOME)" /go/pkg/mod && chown -R $(UID):$(GID) "$(AGENT_HOME)" /go/pkg/mod'
+	$(MAKE) install-agent-context
+
+install-agent-context: volumes
+	docker run --rm \
+		--user 0:0 \
+		--mount type=volume,src="$(AGENTHOME)",target="$(AGENT_HOME)" \
+		--mount type=bind,src="$(AGENT_CONTEXT_SOURCE)",target=/tmp/go-agent-harness.md,readonly \
+		$(AGENT_IMAGE) \
+		sh -lc 'mkdir -p "$(AGENT_HOME)" && cp /tmp/go-agent-harness.md "$(AGENT_CONTEXT_DEST)" && chown $(UID):$(GID) "$(AGENT_CONTEXT_DEST)"'
+	@echo "Installed harness context to $(AGENT_CONTEXT_DEST) in volume $(AGENTHOME)"
 
 install:
 	@mkdir -p "$(INSTALL_DIR)"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Obsidian Dataview Tasks"
+  short_description: "Manage Markdown tasks with Dataview and Tasks"
+  default_prompt: "Use $obsidian-dataview-tasks to create, update, and dashboard Markdown tickets for Obsidian Dataview and Tasks."

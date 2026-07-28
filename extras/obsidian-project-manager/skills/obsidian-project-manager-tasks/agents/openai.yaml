@@ -1,0 +1,4 @@
+interface:
+  display_name: "Obsidian Project Manager Tasks"
+  short_description: "Manage Project Manager task files"
+  default_prompt: "Use $obsidian-project-manager-tasks to create and update Markdown task files for Obsidian Project Manager."

@@ -117,7 +117,7 @@ This will:
 
 - create persistent Docker volumes
 - build the `go-agent` image
-- initialize writable volume ownership
+- initialize writable volume ownership and install harness context into `agenthome`
 - create `go-agent-internal-net` and `go-agent-upstream-net`, then start `go-agent-egress-proxy`
 - install `story-shell` and `run-shell`
 
@@ -141,6 +141,30 @@ make install INSTALL_DIR=/custom/bin
 ```
 
 Make sure the install directory is on your `PATH`.
+
+## Harness context for agents
+
+`make init-volumes` installs a short harness context file into the persistent agent home volume:
+
+```text
+/home/agent/.go-agent-harness.md
+```
+
+Refresh it without reinitializing volumes:
+
+```sh
+make install-agent-context
+```
+
+In project `AGENTS.md` files, point agents at it with:
+
+```md
+# Harness Context
+
+Read `$HOME/.go-agent-harness.md` before making assumptions about local harness-specific paths, services, networks, volumes, launchers, or persistence behavior.
+
+Use it as the source of truth for conventions such as `/workspace`, persistent home/cache volumes, `go-agent-internal-net`, egress proxy behavior, and local service hostnames.
+```
 
 ## Authentication note
 
@@ -288,6 +312,8 @@ Current addons:
 
 - `extras/foundationdb/README.md` — run a FoundationDB container on the internal agent network, install the cluster file into `agenthome`, and optionally build an agent image with FoundationDB client libraries
 - `extras/redpanda/README.md` — run a Redpanda Kafka-compatible broker on the internal agent network and optionally build an agent image with `rpk`
+- `extras/obsidian-project-manager/` — install a Codex skill for creating and updating Obsidian Project Manager Markdown task files
+- `extras/obsidian-dataview-tasks/` — install a Codex skill for Markdown tickets, Dataview dashboards, and Tasks query blocks
 
 ## Task tracking
 
