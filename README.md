@@ -219,6 +219,13 @@ If you need a different agent image, pass it through directly:
 story-shell --image go-agent-fdb
 ```
 
+For an image with all optional agent extras installed:
+
+```sh
+make -f extras/all/Makefile agent-all-build
+story-shell --image go-agent-all
+```
+
 The low-level launcher supports the same image override:
 
 ```sh

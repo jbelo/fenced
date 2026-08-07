@@ -103,19 +103,11 @@ go-agent-redpanda
 
 which extends the main `go-agent` image.
 
-For projects that also need FoundationDB client libraries, build from the FoundationDB-derived image instead:
+For projects that also need the common extras together, use the union image:
 
 ```sh
-make -f extras/foundationdb/Makefile agent-fdb-build
-make -f extras/redpanda/Makefile agent-redpanda-build \
-  AGENT_IMAGE=go-agent-fdb \
-  AGENT_REDPANDA_IMAGE=go-agent-fdb-redpanda
-```
-
-Then run a shell with it:
-
-```sh
-story-shell --image go-agent-fdb-redpanda
+make -f extras/all/Makefile agent-all-build
+story-shell --image go-agent-all
 ```
 
 ## branch-kms workflow
@@ -134,10 +126,7 @@ make -f extras/redpanda/Makefile redpanda-up
 Optionally build a combined agent image:
 
 ```sh
-make -f extras/foundationdb/Makefile agent-fdb-build FDB_VERSION=7.3.68
-make -f extras/redpanda/Makefile agent-redpanda-build \
-  AGENT_IMAGE=go-agent-fdb \
-  AGENT_REDPANDA_IMAGE=go-agent-fdb-redpanda
+make -f extras/all/Makefile agent-all-build FDB_VERSION=7.3.68
 ```
 
 Inside the agent shell:

@@ -66,14 +66,8 @@ story-shell --image go-agent-fdb-openssl
 For FoundationDB, Redpanda, and OpenSSL together:
 
 ```sh
-make -f extras/foundationdb/Makefile agent-fdb-build FDB_VERSION=7.3.68
-make -f extras/redpanda/Makefile agent-redpanda-build \
-  AGENT_IMAGE=go-agent-fdb \
-  AGENT_REDPANDA_IMAGE=go-agent-fdb-redpanda
-make -f extras/openssl/Makefile agent-openssl-build \
-  AGENT_IMAGE=go-agent-fdb-redpanda \
-  AGENT_OPENSSL_IMAGE=go-agent-fdb-redpanda-openssl
-story-shell --image go-agent-fdb-redpanda-openssl
+make -f extras/all/Makefile agent-all-build FDB_VERSION=7.3.68
+story-shell --image go-agent-all
 ```
 
 ## Notes

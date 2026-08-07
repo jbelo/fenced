@@ -1,0 +1,35 @@
+ARG BASE_IMAGE=go-agent
+ARG REDPANDA_VERSION=v26.1.6
+
+FROM docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION} AS redpanda
+
+FROM ${BASE_IMAGE}
+
+ARG FDB_VERSION=7.3.68
+ARG TARGETARCH
+
+COPY --from=redpanda /usr/bin/rpk /usr/local/bin/rpk
+COPY --from=redpanda /opt/redpanda/libexec/rpk /opt/redpanda/libexec/rpk
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      libssl-dev \
+      openssl \
+      pkg-config; \
+    pkg-config --cflags --libs openssl; \
+    printf '#include <openssl/cms.h>\nint main(void){return 0;}\n' | \
+      cc $(pkg-config --cflags openssl) -x c - $(pkg-config --libs openssl) -o /tmp/openssl-cms-smoke; \
+    rm -f /tmp/openssl-cms-smoke; \
+    deb_arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "${deb_arch}" in \
+      amd64) fdb_arch=amd64 ;; \
+      arm64) fdb_arch=aarch64 ;; \
+      *) echo "unsupported architecture=${deb_arch}" >&2; exit 1 ;; \
+    esac; \
+    curl -fL -o /tmp/foundationdb-clients.deb \
+      "https://github.com/apple/foundationdb/releases/download/${FDB_VERSION}/foundationdb-clients_${FDB_VERSION}-1_${fdb_arch}.deb"; \
+    dpkg -i /tmp/foundationdb-clients.deb || apt-get install -y -f; \
+    rm -f /tmp/foundationdb-clients.deb; \
+    rm -rf /var/lib/apt/lists/*

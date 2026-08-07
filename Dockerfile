@@ -1,4 +1,4 @@
-FROM golang:1.26.3-bookworm AS git-builder
+FROM golang:1.26.5-bookworm AS git-builder
 
 ARG GIT_VERSION=2.48.1
 
@@ -19,7 +19,7 @@ RUN curl -L "https://www.kernel.org/pub/software/scm/git/git-${GIT_VERSION}.tar.
     make prefix=/usr/local install && \
     cd / && rm -rf "git-${GIT_VERSION}"
 
-FROM golang:1.26.3-bookworm
+FROM golang:1.26.5-bookworm
 
 RUN echo "deb http://deb.debian.org/debian bookworm-backports main" > /etc/apt/sources.list.d/bookworm-backports.list
 
