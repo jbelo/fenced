@@ -238,6 +238,74 @@ Or invoke the low-level launcher directly:
 run-shell --workspace-root /path/to/workspace/root --subdir stories/<story>/<worktree>
 ```
 
+By default, `story-shell` mounts the whole workspace read-only and grants write
+access to the selected start directory:
+
+```sh
+story-shell stories/<story>/<worktree>
+```
+
+This mounts the workspace root read-only at `/workspace`, then overlays
+`/workspace/stories/<story>/<worktree>` as a read-write bind mount.
+
+Grant write access to additional workspace subdirectories with repeated
+`--workspace-rw` options:
+
+```sh
+story-shell \
+  --workspace-rw stories/<story>/<worktree> \
+  --workspace-rw stories/<story>/notes
+```
+
+Use `--workspace-readwrite` only when you intentionally want the older behavior where
+the whole workspace root is writable:
+
+```sh
+story-shell --workspace-readwrite stories/<story>/<worktree>
+```
+
+The lower-level `run-shell` keeps the older default unless you pass
+`--workspace-readonly` explicitly.
+
+Pass extra `docker run` arguments with repeated `--docker-arg` options. Each Docker
+argument token should be passed separately:
+
+```sh
+story-shell \
+  --docker-arg -v \
+  --docker-arg /host/path:/container/path:ro
+```
+
+The lower-level launcher supports the same passthrough:
+
+```sh
+run-shell \
+  --workspace-root /path/to/workspace/root \
+  --subdir stories/<story>/<worktree> \
+  --docker-arg --mount \
+  --docker-arg type=bind,src=/host/path,target=/container/path,readonly
+```
+
+Claude Code can use its default config path under the agent home:
+
+```text
+/home/agent/.claude
+```
+
+Because `/home/agent` is already backed by the persistent `agenthome` Docker volume,
+Claude auth/config files written there survive across agent shells. No extra mount is
+needed for that default setup.
+
+If you explicitly want to share the host's Claude config instead, bind-mount it:
+
+```sh
+mkdir -p "$HOME/.claude"
+story-shell \
+  --image go-agent-all \
+  --docker-arg --mount \
+  --docker-arg type=bind,src="$HOME/.claude",target=/home/agent/.claude
+```
+
 By default, `run-shell`:
 
 - joins the internal network `go-agent-internal-net`
@@ -292,6 +360,10 @@ Current Squid allowlist covers CONNECT access to:
 - `*.openai.com`
 - `*.chatgpt.com`
 - `*.npmjs.org` (including `registry.npmjs.org`)
+- `*.anthropic.com`
+- `*.claude.com`
+- `*.claude.ai`
+- `*.sentry.io`
 
 Validate the setup:
 

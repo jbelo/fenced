@@ -13,10 +13,17 @@ Options:
                      Workspace root directory to mount at /workspace.
   --subdir PATH      Subdirectory inside /workspace to use as the working directory.
                      Defaults to .
+  --workspace-readonly
+                     Mount the workspace root read-only.
+  --workspace-rw PATH
+                     Mount a workspace subdirectory read-write. Repeat as needed.
+                     PATH may be relative to the workspace root or absolute under it.
   --image NAME       Docker image name. Defaults to go-agent.
   --agenthome NAME   Docker volume name for the agent home. Defaults to agenthome.
   --gomodcache NAME  Docker volume name for the Go module cache. Defaults to gomodcache.
   --no-egress-proxy  Disable the Squid egress proxy for this session.
+  --docker-arg ARG   Extra argument to pass to docker run before the image name.
+                     Repeat for multi-token Docker options such as -v HOST:CONTAINER.
   -h, --help         Show this help.
 
 Environment variables used as defaults:
@@ -38,6 +45,9 @@ egress_proxy_url="${EGRESS_PROXY_URL:-http://go-agent-egress-proxy:3128}"
 no_proxy_value="${NO_PROXY:-localhost,127.0.0.1}"
 uid="$(id -u)"
 gid="$(id -g)"
+extra_docker_args=()
+workspace_readonly=0
+writable_workspace_paths=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -49,6 +59,15 @@ while [ "$#" -gt 0 ]; do
     --subdir)
       [ "$#" -ge 2 ] || { echo "error: --subdir requires a path" >&2; exit 1; }
       subdir="$2"
+      shift 2
+      ;;
+    --workspace-readonly)
+      workspace_readonly=1
+      shift
+      ;;
+    --workspace-rw)
+      [ "$#" -ge 2 ] || { echo "error: --workspace-rw requires a path" >&2; exit 1; }
+      writable_workspace_paths+=("$2")
       shift 2
       ;;
     --image)
@@ -69,6 +88,11 @@ while [ "$#" -gt 0 ]; do
     --no-egress-proxy)
       egress_proxy_enable=0
       shift
+      ;;
+    --docker-arg)
+      [ "$#" -ge 2 ] || { echo "error: --docker-arg requires a value" >&2; exit 1; }
+      extra_docker_args+=("$2")
+      shift 2
       ;;
     -h|--help)
       usage
@@ -102,6 +126,53 @@ if [ ! -d "$workspace_root" ]; then
   echo "error: workspace root does not exist: $workspace_root" >&2
   exit 1
 fi
+
+workspace_mount="type=bind,src=$workspace_root,target=$container_root"
+if [ "$workspace_readonly" = "1" ]; then
+  workspace_mount="$workspace_mount,readonly"
+fi
+
+writable_workspace_mounts=()
+for writable_path in "${writable_workspace_paths[@]}"; do
+  case "$writable_path" in
+    /*)
+      writable_host_path="$(resolve_dir "$writable_path")"
+      ;;
+    *)
+      writable_host_path="$(resolve_dir "$workspace_root/$writable_path")"
+      ;;
+  esac
+
+  if [ ! -d "$writable_host_path" ]; then
+    echo "error: writable workspace path is not a directory: $writable_path" >&2
+    exit 1
+  fi
+
+  case "$writable_host_path" in
+    "$workspace_root")
+      writable_rel_path="."
+      ;;
+    "$workspace_root"/*)
+      writable_rel_path="${writable_host_path#$workspace_root/}"
+      ;;
+    *)
+      cat >&2 <<EOF
+error: writable workspace path is outside the workspace root:
+  workspace root: $workspace_root
+  writable path:  $writable_host_path
+EOF
+      exit 1
+      ;;
+  esac
+
+  if [ "$writable_rel_path" = "." ]; then
+    writable_target="$container_root"
+  else
+    writable_target="$container_root/$writable_rel_path"
+  fi
+
+  writable_workspace_mounts+=("--mount" "type=bind,src=$writable_host_path,target=$writable_target")
+done
 
 container_name_suffix="$(basename "$subdir")"
 if [ "$container_name_suffix" = "." ] || [ -z "$container_name_suffix" ]; then
@@ -138,7 +209,8 @@ docker_args=(
   --read-only
   --tmpfs /tmp:rw,size=1g,mode=1777
   --tmpfs /run:rw,size=64m
-  --mount "type=bind,src=$workspace_root,target=$container_root"
+  --mount "$workspace_mount"
+  "${writable_workspace_mounts[@]}"
   --mount "type=volume,src=$agenthome_vol,target=$agent_home"
   --mount "type=volume,src=$gomodcache_vol,target=/go/pkg/mod"
   -e "HOME=$agent_home"
@@ -158,7 +230,7 @@ if [ "$egress_proxy_enable" != "0" ]; then
   )
 fi
 
-exec docker run "${docker_args[@]}" \
+exec docker run "${docker_args[@]}" "${extra_docker_args[@]}" \
   -e "NPM_CONFIG_PREFIX=$agent_home/.local" \
   "$agent_image" \
   bash -c 'export PATH="$HOME/.local/bin:$PATH"; exec bash'

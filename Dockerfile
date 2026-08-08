@@ -42,7 +42,7 @@ COPY --from=git-builder /usr/local /usr/local
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y nodejs
 
-RUN npm install -g @mariozechner/pi-coding-agent @openai/codex
+RUN npm install -g @mariozechner/pi-coding-agent @openai/codex @anthropic-ai/claude-code
 
 WORKDIR /workspace
 

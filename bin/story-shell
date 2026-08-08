@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  story-shell [--workspace-root PATH] [--image NAME] [START_DIR]
+  story-shell [--workspace-root PATH] [--image NAME] [--workspace-rw PATH] [START_DIR]
 
 Launch the agent container for a host workspace directory.
 
@@ -15,7 +15,16 @@ Options:
   --workspace-root PATH, --host-root PATH
                      Workspace root to mount at /workspace. If omitted, the command tries to
                      infer it from the start directory by looking for a /stories/ path component.
+  --workspace-readwrite
+                     Mount the whole workspace root read-write.
+  --workspace-readonly
+                     Mount the workspace root read-only. This is the default for story-shell.
+  --workspace-rw PATH
+                     Mount a workspace subdirectory read-write. Repeat as needed.
+                     Defaults to START_DIR.
   --image NAME       Docker image name to pass through to run-shell.
+  --docker-arg ARG   Extra argument to pass to docker run through run-shell.
+                     Repeat for multi-token Docker options such as -v HOST:CONTAINER.
   -h, --help         Show this help.
 
 Examples:
@@ -28,6 +37,9 @@ EOF
 workspace_root="${WORKSPACE_ROOT:-${HOST_ROOT:-}}"
 agent_image="${AGENT_IMAGE:-}"
 start_dir=""
+extra_docker_args=()
+workspace_readonly=1
+writable_workspace_paths=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -39,6 +51,24 @@ while [ "$#" -gt 0 ]; do
     --image)
       [ "$#" -ge 2 ] || { echo "error: --image requires a value" >&2; exit 1; }
       agent_image="$2"
+      shift 2
+      ;;
+    --workspace-readonly)
+      workspace_readonly=1
+      shift
+      ;;
+    --workspace-readwrite)
+      workspace_readonly=0
+      shift
+      ;;
+    --workspace-rw)
+      [ "$#" -ge 2 ] || { echo "error: --workspace-rw requires a path" >&2; exit 1; }
+      writable_workspace_paths+=("$2")
+      shift 2
+      ;;
+    --docker-arg)
+      [ "$#" -ge 2 ] || { echo "error: --docker-arg requires a value" >&2; exit 1; }
+      extra_docker_args+=("--docker-arg" "$2")
       shift 2
       ;;
     -h|--help)
@@ -130,8 +160,26 @@ if [ ! -x "$run_shell" ]; then
   exit 1
 fi
 
-if [ -n "$agent_image" ]; then
-  exec "$run_shell" --workspace-root "$workspace_root" --subdir "$subdir" --image "$agent_image"
+if [ "${#writable_workspace_paths[@]}" -eq 0 ]; then
+  writable_workspace_paths+=("$start_dir")
 fi
 
-exec "$run_shell" --workspace-root "$workspace_root" --subdir "$subdir"
+run_shell_args=(
+  --workspace-root "$workspace_root"
+  --subdir "$subdir"
+)
+
+if [ -n "$agent_image" ]; then
+  run_shell_args+=(--image "$agent_image")
+fi
+
+if [ "$workspace_readonly" = "1" ]; then
+  run_shell_args+=(--workspace-readonly)
+  for writable_path in "${writable_workspace_paths[@]}"; do
+    run_shell_args+=(--workspace-rw "$writable_path")
+  done
+fi
+
+run_shell_args+=("${extra_docker_args[@]}")
+
+exec "$run_shell" "${run_shell_args[@]}"
