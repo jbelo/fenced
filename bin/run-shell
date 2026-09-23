@@ -182,7 +182,8 @@ container_name_suffix="$(printf '%s' "$container_name_suffix" | tr '[:upper:]' '
 if [ -z "$container_name_suffix" ]; then
   container_name_suffix="workspace"
 fi
-container_name="go-agent-${container_name_suffix}"
+container_id="$(date +%Y%m%d%H%M%S)-$$"
+container_name="go-agent-${container_name_suffix}-${container_id}"
 
 if [ "$egress_proxy_enable" != "0" ]; then
   if ! docker network inspect "$agent_internal_network" >/dev/null 2>&1; then
