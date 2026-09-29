@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: agent-docker-usage [--verbose] [-h|--help]
+
+Show Docker disk usage for images, containers, volumes, and build cache.
+Uses the host's current Docker context (or DOCKER_HOST).
+
+Options:
+  -v, --verbose     Show individual images, containers, volumes, and cache entries.
+  -h, --help        Show this help.
+
+Docker's "reclaimable" label does not mean data is disposable: unused volumes
+can contain persistent agent homes or databases. Shared image/cache layers
+also mean totals are not necessarily additive. This command deletes nothing.
+Use agent-vm-status to check the VM filesystem's actual remaining capacity.
+EOF
+}
+
+verbose=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -v|--verbose) verbose=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "error: unexpected argument: $1" >&2; usage >&2; exit 1 ;;
+  esac
+  shift
+done
+command -v docker >/dev/null 2>&1 || { echo "error: docker is not installed" >&2; exit 1; }
+
+if [ "$verbose" -eq 1 ]; then
+  exec docker system df --verbose
+fi
+exec docker system df

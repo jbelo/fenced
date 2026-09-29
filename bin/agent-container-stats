@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: agent-container-stats [--live] [-h|--help]
+
+Show CPU and memory usage for all running containers in the current Docker
+context (or DOCKER_HOST), including agents and supporting services.
+By default, print one snapshot and exit.
+
+Options:
+  --live            Continuously update; press Ctrl-C to stop.
+  -h, --help        Show this help.
+
+100% CPU represents roughly one fully used CPU; multicore usage can exceed it.
+Memory limits may reflect the whole VM when containers have no explicit limit.
+Use agent-vm-status for overall VM headroom, including non-container overhead.
+EOF
+}
+
+live=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --live) live=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "error: unexpected argument: $1" >&2; usage >&2; exit 1 ;;
+  esac
+  shift
+done
+command -v docker >/dev/null 2>&1 || { echo "error: docker is not installed" >&2; exit 1; }
+
+stats_format='table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}'
+if [ "$live" -eq 1 ]; then
+  exec docker stats --format "$stats_format"
+fi
+exec docker stats --no-stream --format "$stats_format"

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: agent-status <command> [options]
+
+Inspect agent infrastructure resource usage from the host.
+Invokes the installed resource helpers; all commands are read-only.
+
+Commands:
+  vm                  Colima VM CPU/load, available RAM, and disk capacity.
+  storage [--verbose] Docker storage summary or detailed image/volume/cache usage.
+  containers [--live] Container CPU/memory snapshot or continuous monitoring.
+
+Use agent-status <command> --help for details, or -h/--help for this overview.
+Without a command, show this overview.
+EOF
+}
+
+case "${1:-}" in
+  ''|-h|--help) usage; exit 0 ;;
+  vm) helper=agent-vm-status ;;
+  storage) helper=agent-docker-usage ;;
+  containers) helper=agent-container-stats ;;
+  *) echo "error: unknown command: $1" >&2; usage >&2; exit 1 ;;
+esac
+shift
+
+# Resolve sibling helpers so this works from the checkout or any INSTALL_DIR.
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+exec "$script_dir/$helper" "$@"

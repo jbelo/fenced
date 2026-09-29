@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: agent-vm-status [-h|--help]
+
+Show CPU count/load, available memory, and disk capacity inside the default
+Colima VM. Run on the host; requires Colima to be installed and running.
+
+For memory headroom, read "available", not "free" (Linux caches use free RAM).
+For container storage headroom, read Avail and Use% for /var/lib/docker.
+Load averages cover 1, 5, and 15 minutes; compare them with the CPU count.
+This command only reads VM status and does not clean up or resize anything.
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+if [ "$#" -ne 0 ]; then
+  echo "error: unexpected argument: $1" >&2
+  usage >&2
+  exit 1
+fi
+command -v colima >/dev/null 2>&1 || { echo "error: colima is not installed" >&2; exit 1; }
+
+exec colima ssh -- sh -c '
+  set -e
+  printf "CPUs: "
+  nproc
+  uptime
+  free -h
+  df -h / /var/lib/docker
+'
