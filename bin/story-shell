@@ -23,6 +23,7 @@ Options:
                      Mount a workspace subdirectory read-write. Repeat as needed.
                      Defaults to START_DIR.
   --image NAME       Docker image name to pass through to run-shell.
+  --no-tmux         Start plain Bash instead of the default tmux session.
   --docker-arg ARG   Extra argument to pass to docker run through run-shell.
                      Repeat for multi-token Docker options such as -v HOST:CONTAINER.
   -h, --help         Show this help.
@@ -38,6 +39,7 @@ workspace_root="${WORKSPACE_ROOT:-${HOST_ROOT:-}}"
 agent_image="${AGENT_IMAGE:-}"
 start_dir=""
 extra_docker_args=()
+shell_options=()
 workspace_readonly=1
 writable_workspace_paths=()
 
@@ -65,6 +67,10 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || { echo "error: --workspace-rw requires a path" >&2; exit 1; }
       writable_workspace_paths+=("$2")
       shift 2
+      ;;
+    --no-tmux)
+      shell_options+=("--no-tmux")
+      shift
       ;;
     --docker-arg)
       [ "$#" -ge 2 ] || { echo "error: --docker-arg requires a value" >&2; exit 1; }
@@ -180,6 +186,6 @@ if [ "$workspace_readonly" = "1" ]; then
   done
 fi
 
-run_shell_args+=("${extra_docker_args[@]}")
+run_shell_args+=("${shell_options[@]}" "${extra_docker_args[@]}")
 
 exec "$run_shell" "${run_shell_args[@]}"

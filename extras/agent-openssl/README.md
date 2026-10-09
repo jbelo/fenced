@@ -17,7 +17,7 @@ The main harness stays generic. OpenSSL headers and build-time libraries are kep
 Build the derived image:
 
 ```sh
-make -f extras/openssl/Makefile agent-openssl-build
+make -f extras/agent-openssl/Makefile agent-openssl-build
 ```
 
 This creates:
@@ -57,7 +57,7 @@ For example, to add OpenSSL development support on top of the FoundationDB clien
 
 ```sh
 make -f extras/foundationdb/Makefile agent-fdb-build FDB_VERSION=7.3.68
-make -f extras/openssl/Makefile agent-openssl-build \
+make -f extras/agent-openssl/Makefile agent-openssl-build \
   AGENT_IMAGE=go-agent-fdb \
   AGENT_OPENSSL_IMAGE=go-agent-fdb-openssl
 story-shell --image go-agent-fdb-openssl

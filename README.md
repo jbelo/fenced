@@ -117,9 +117,9 @@ This will:
 
 - create persistent Docker volumes
 - build the `go-agent` image
-- initialize writable volume ownership and install harness context into `agenthome`
+- initialize writable volume ownership, install Pi and harness context, and seed missing tmux configuration in `agenthome`
 - create `go-agent-internal-net` and `go-agent-upstream-net`, then start `go-agent-egress-proxy`
-- install `story-shell` and `run-shell`
+- install `story-shell`, `run-shell`, and the resource helpers
 
 Build the repo-owned Squid proxy image when needed:
 
@@ -142,15 +142,84 @@ make install INSTALL_DIR=/custom/bin
 
 Make sure the install directory is on your `PATH`.
 
+## Resource helpers
+
+`make install` also installs `agent-status` and its helpers into `~/.local/bin`
+(or `INSTALL_DIR`). Run it on the host. Each subcommand accepts `--help` to
+explain its purpose and output.
+
+```sh
+agent-status vm                # Default Colima VM: CPU load, available RAM, disk headroom
+agent-status storage           # Docker storage summary
+agent-status storage --verbose # Individual images, volumes, containers, and build cache
+agent-status containers        # One snapshot of running containers' CPU and memory usage
+agent-status containers --live # Continuous updates; Ctrl-C to stop
+```
+
+The wrapper invokes `agent-vm-status`, `agent-docker-usage`, and
+`agent-container-stats`, which remain available directly. The Docker helpers use
+the current Docker context or `DOCKER_HOST`; `agent-status vm` specifically
+inspects the default Colima VM. All are read-only.
+For memory, use the VM's **available** figure; for disk, check `/var/lib/docker`.
+Docker's reclaimable volumes may still contain valuable persistent data.
+
+## Agent SSH client
+
+The base image also supplies an SSH client wrapper that resolves the launcher's
+numeric UID through a temporary passwd file. This works with a read-only root
+filesystem and does not require a permanent account in the image.
+
+## Agent tmux configuration
+
+`run-shell` and `story-shell` open an `agent` tmux session automatically.
+Use `--no-tmux` for plain Bash. Detaching returns to Bash inside the container;
+reattach with `tmux attach -t agent`. Exiting that outer shell removes the
+ephemeral container and stops its applications. If tmux is unavailable, the
+launcher falls back to Bash.
+
+The default agent configuration is versioned in `config/tmux.conf`.
+`make init-volumes` copies it to `/home/agent/.tmux.conf` in the `agenthome`
+volume only when the destination is missing. Existing files and symlinks are
+preserved, so reinitializing volumes does not overwrite your customizations.
+The installed file is owned by your host UID/GID.
+New tmux sessions and panes start non-login Bash, preserving the container's
+toolchain `PATH`.
+
+After recreating the agent home volume, run `make init-volumes` to restore it.
+To install just the missing tmux configuration, run:
+
+```sh
+make install-agent-tmux
+```
+
+Changes made inside the agent home are not copied back to the repository;
+update `config/tmux.conf` to keep the defaults you want restored in the future.
+No image rebuild is needed for this installation step.
+
+When nesting agent tmux inside host tmux, keep `set -s set-clipboard on` in
+the **host's** `~/.tmux.conf` so clipboard requests can reach your terminal app.
+The agent default also uses `on`, forwarding clipboard requests from applications
+and nested tmux sessions as well as its own selections.
+
 ## Harness context for agents
 
-`make init-volumes` installs a short harness context file into the persistent agent home volume:
+`make init-volumes` installs the harness context and bundled reference documents
+into the persistent agent home volume:
 
 ```text
 /home/agent/.go-agent-harness.md
+/home/agent/.go-agent-harness/extras/AGENT.md
 ```
 
-Refresh it without reinitializing volumes:
+The context points to local reference copies, so agents do not need access to
+this repository. `extras/agent-docs.list` explicitly selects agent-facing usage
+guides to copy, preserving their directory structure. Host setup instructions,
+service templates, runtime secrets, and data are not copied. These generated
+references are overwritten on refresh; keep personal notes separately.
+Previously installed references explicitly listed in `extras/agent-docs-retired.list`
+are removed during refresh; other agent-home files are preserved.
+
+Refresh the context and bundled references without reinitializing volumes:
 
 ```sh
 make install-agent-context
@@ -332,14 +401,27 @@ The launcher also prepares a user-local npm install path in the writable home vo
 
 The proxy allowlist includes npm registry access so user-local npm installs can work through Squid.
 
-This lets you override the image-baked Pi install without rebuilding the image:
+`make init-volumes` installs Pi directly into `$HOME/.local` as the agent UID,
+using `make install-agent-pi`. The initial version defaults to `PI_VERSION=1.0.4`.
+Pi and tmux initialization logic lives in `scripts/install-agent-pi.sh` and
+`scripts/install-agent-tmux.sh`; the Makefile runs them in temporary containers.
+These are setup scripts, not wrappers around normal Pi or tmux execution.
+Existing home installations are preserved, including across image rebuilds.
+For an already initialized home, run `make install-agent-pi` on the host.
+This preparation container uses Docker's default network for npm downloads;
+it does not require the egress proxy to be running. No Pi wrapper or seed is
+included in the image.
+
+Update the writable installation without rebuilding the image:
 
 ```sh
-npm install -g @mariozechner/pi-coding-agent@latest
-which pi
+pi update
 ```
 
-The user-local install in `$HOME/.local/bin` will take precedence over the image-installed binary.
+Updates inside agent containers require npm registry access through the proxy.
+The launcher puts `$HOME/.local/bin` first in PATH. Pi persists in the agent home;
+reinitialize after replacing that volume. Recreate containers from rebuilt images
+to remove the old image's bootstrap helper.
 
 ## Egress proxy operations
 
@@ -390,6 +472,7 @@ Optional, project-specific integrations live under `extras/`.
 Current addons:
 
 - `extras/foundationdb/README.md` — run a FoundationDB container on the internal agent network, install the cluster file into `agenthome`, and optionally build an agent image with FoundationDB client libraries
+- `extras/kms/README.md` — build and run one or two KMS zones on the internal agent network
 - `extras/redpanda/README.md` — run a Redpanda Kafka-compatible broker on the internal agent network and optionally build an agent image with `rpk`
 - `extras/obsidian-project-manager/` — install a Codex skill for creating and updating Obsidian Project Manager Markdown task files
 - `extras/obsidian-dataview-tasks/` — install a Codex skill for Markdown tickets, Dataview dashboards, and Tasks query blocks

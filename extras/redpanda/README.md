@@ -1,5 +1,8 @@
 # Redpanda addon
 
+Agent-side usage: [`redpanda-connect` skill](skills/redpanda-connect/SKILL.md), installed by
+`make install-agent-context` at `$HOME/.agents/skills/redpanda-connect/SKILL.md`.
+
 This folder contains optional tooling for running a Redpanda container alongside the coding harness and, when useful, building an agent image with the `rpk` CLI.
 
 Redpanda is Kafka API-compatible and is suitable for projects whose tests need a local Kafka broker, such as `branch-kms` billing integration coverage.
@@ -158,6 +161,6 @@ make -f extras/redpanda/Makefile redpanda-clean-data
 ## Notes
 
 - Sarama is a pure Go Kafka client, so the agent image does not need native Kafka libraries.
-- `Dockerfile.agent-redpanda` only adds the `rpk` CLI for debugging and broker inspection.
+- `Dockerfile` only adds the `rpk` CLI for debugging and broker inspection.
 - The default broker listener is internal-only and advertised as `go-agent-redpanda:9092`.
 - If a project uses testcontainers by default, set its external Kafka environment variables to force use of this long-lived broker.

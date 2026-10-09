@@ -1,5 +1,8 @@
 # FoundationDB addon
 
+Agent-side usage: [`foundationdb-connect` skill](skills/foundationdb-connect/SKILL.md), installed by
+`make install-agent-context` at `$HOME/.agents/skills/foundationdb-connect/SKILL.md`.
+
 This folder contains optional tooling for running a FoundationDB container alongside the coding harness and, when needed, building an agent image with FoundationDB client libraries.
 
 The main harness stays generic. FoundationDB support is kept here as an opt-in addon.

@@ -15,7 +15,7 @@ AGENTHOME ?= agenthome
 AGENT_HOME ?= /home/agent
 FDB_CLUSTER_DEST ?= $(AGENT_HOME)/.fdb.cluster
 AGENT_FDB_IMAGE ?= go-agent-fdb
-AGENT_FDB_DOCKERFILE ?= $(ROOT_DIR)/extras/foundationdb/Dockerfile.agent-fdb
+AGENT_FDB_DOCKERFILE ?= $(ROOT_DIR)/extras/foundationdb/Dockerfile
 
 .PHONY: help networks fdb-image-build-source fdb-up fdb-down fdb-init fdb-cli fdb-logs fdb-cluster-show fdb-cluster-install-agenthome fdb-clean-data agent-fdb-build
 

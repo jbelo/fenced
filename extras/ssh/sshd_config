@@ -1,0 +1,8 @@
+AuthorizedKeysFile /etc/ssh/authorized_keys
+# The read-only bind mount belongs to the host user, not container root.
+StrictModes no
+PermitRootLogin yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+UsePAM yes
+Subsystem sftp internal-sftp

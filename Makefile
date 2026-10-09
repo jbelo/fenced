@@ -4,9 +4,11 @@ AGENT_HOME := /home/agent
 
 AGENTHOME := agenthome
 GOMODCACHE := gomodcache
+PI_VERSION ?= 1.0.4
 
 REPO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 INSTALL_DIR ?= $(HOME)/.local/bin
+INSTALL_SCRIPTS := run-shell story-shell agent-status agent-vm-status agent-docker-usage agent-container-stats
 
 AGENT_INTERNAL_NETWORK := go-agent-internal-net
 PROXY_UPSTREAM_NETWORK := go-agent-upstream-net
@@ -16,18 +18,24 @@ SQUID_CONF := $(REPO_DIR)/squid.conf
 PROXY_DOCKERFILE := $(REPO_DIR)/Dockerfile.squid
 AGENT_CONTEXT_SOURCE := $(REPO_DIR)/agent-context.md
 AGENT_CONTEXT_DEST := $(AGENT_HOME)/.go-agent-harness.md
+AGENT_EXTRAS_SOURCE := $(REPO_DIR)/extras
+AGENT_DOCS_DEST := $(AGENT_HOME)/.go-agent-harness
+AGENT_TMUX_SOURCE := $(REPO_DIR)/config/tmux.conf
+AGENT_TMUX_DEST := $(AGENT_HOME)/.tmux.conf
 
 UID := $(shell id -u)
 GID := $(shell id -g)
 
-.PHONY: help volumes init-volumes install-agent-context build install networks egress-proxy-build egress-proxy-up egress-proxy-down egress-proxy-logs egress-init egress-verify clean
+.PHONY: help volumes init-volumes install-agent-pi install-agent-context install-agent-tmux build install networks egress-proxy-build egress-proxy-up egress-proxy-down egress-proxy-logs egress-init egress-verify clean
 
 help:
 	@echo "make build                       Build the agent container image"
 	@echo "make volumes                     Create Docker volumes"
 	@echo "make init-volumes                Initialize writable volume ownership"
-	@echo "make install-agent-context       Install harness context into the agent home volume"
-	@echo "make install [INSTALL_DIR=path]  Install the launcher scripts"
+	@echo "make install-agent-context       Refresh harness context and reference docs in agent home"
+	@echo "make install-agent-tmux          Install agent tmux config if missing"
+	@echo "make install-agent-pi            Install Pi in the writable agent home if missing"
+	@echo "make install [INSTALL_DIR=path]  Install launchers and resource helpers"
 	@echo "make networks                    Create the internal agent network and proxy upstream network"
 	@echo "make egress-proxy-build          Build the Squid egress proxy image"
 	@echo "make egress-proxy-up             Start the Squid egress proxy"
@@ -52,22 +60,61 @@ init-volumes: volumes
 		$(AGENT_IMAGE) \
 		sh -lc 'mkdir -p "$(AGENT_HOME)" /go/pkg/mod && chown -R $(UID):$(GID) "$(AGENT_HOME)" /go/pkg/mod'
 	$(MAKE) install-agent-context
+	$(MAKE) install-agent-tmux
+	$(MAKE) install-agent-pi
+
+# Host-managed preparation uses Docker's default network for npm downloads.
+install-agent-pi:
+	@docker volume inspect "$(AGENTHOME)" >/dev/null || { echo "Run make init-volumes first." >&2; exit 1; }
+	docker run --rm --read-only --tmpfs /tmp:rw,mode=1777 \
+		--user $(UID):$(GID) --env HOME="$(AGENT_HOME)" \
+		--mount "type=volume,src=$(AGENTHOME),target=$(AGENT_HOME)" \
+		--mount "type=bind,src=$(REPO_DIR)/scripts/install-agent-pi.sh,target=/tmp/install-agent-pi.sh,readonly" \
+		$(AGENT_IMAGE) sh /tmp/install-agent-pi.sh "$(PI_VERSION)"
 
 install-agent-context: volumes
 	docker run --rm \
 		--user 0:0 \
 		--mount type=volume,src="$(AGENTHOME)",target="$(AGENT_HOME)" \
 		--mount type=bind,src="$(AGENT_CONTEXT_SOURCE)",target=/tmp/go-agent-harness.md,readonly \
+		--mount type=bind,src="$(AGENT_EXTRAS_SOURCE)",target=/tmp/harness-extras,readonly \
 		$(AGENT_IMAGE) \
-		sh -lc 'mkdir -p "$(AGENT_HOME)" && cp /tmp/go-agent-harness.md "$(AGENT_CONTEXT_DEST)" && chown $(UID):$(GID) "$(AGENT_CONTEXT_DEST)"'
-	@echo "Installed harness context to $(AGENT_CONTEXT_DEST) in volume $(AGENTHOME)"
+		sh -c 'set -eu; \
+			mkdir -p "$(AGENT_HOME)"; \
+			install -m 0644 -o $(UID) -g $(GID) /tmp/go-agent-harness.md "$(AGENT_CONTEXT_DEST)"; \
+			install -d -m 0755 -o $(UID) -g $(GID) "$(AGENT_DOCS_DEST)" "$(AGENT_DOCS_DEST)/extras"; \
+			while IFS= read -r relative || [ -n "$$relative" ]; do \
+				[ -n "$$relative" ] || continue; \
+				destination="$(AGENT_DOCS_DEST)/extras/$$relative"; \
+				install -d -m 0755 -o $(UID) -g $(GID) "$$(dirname "$$destination")"; \
+				install -m 0644 -o $(UID) -g $(GID) "/tmp/harness-extras/$$relative" "$$destination"; \
+			done < /tmp/harness-extras/agent-docs.list; \
+			install -d -m 0755 -o $(UID) -g $(GID) "$(AGENT_HOME)/.agents" "$(AGENT_HOME)/.agents/skills"; \
+			while IFS= read -r relative || [ -n "$$relative" ]; do \
+				[ -n "$$relative" ] || continue; \
+				case "$$relative" in /*|..|../*|*/../*|*/..) echo "Invalid skill path: $$relative" >&2; exit 1;; esac; \
+				skill=$$(basename "$$relative"); \
+				destination="$(AGENT_HOME)/.agents/skills/$$skill"; \
+				install -d -m 0755 -o $(UID) -g $(GID) "$$destination"; \
+				install -m 0644 -o $(UID) -g $(GID) "/tmp/harness-extras/$$relative/SKILL.md" "$$destination/SKILL.md"; \
+			done < /tmp/harness-extras/agent-skills.list'
+	@echo "Installed harness context and reference docs in volume $(AGENTHOME)"
+
+install-agent-tmux: volumes
+	docker run --rm \
+		--user 0:0 \
+		--mount type=volume,src="$(AGENTHOME)",target="$(AGENT_HOME)" \
+		--mount type=bind,src="$(AGENT_TMUX_SOURCE)",target=/tmp/agent-tmux.conf,readonly \
+		--mount "type=bind,src=$(REPO_DIR)/scripts/install-agent-tmux.sh,target=/tmp/install-agent-tmux.sh,readonly" \
+		$(AGENT_IMAGE) sh /tmp/install-agent-tmux.sh \
+			/tmp/agent-tmux.conf "$(AGENT_TMUX_DEST)" "$(UID)" "$(GID)"
 
 install:
 	@mkdir -p "$(INSTALL_DIR)"
-	@install -m 0755 "$(REPO_DIR)/bin/run-shell" "$(INSTALL_DIR)/run-shell"
-	@install -m 0755 "$(REPO_DIR)/bin/story-shell" "$(INSTALL_DIR)/story-shell"
-	@echo "Installed $(INSTALL_DIR)/story-shell"
-	@echo "Installed $(INSTALL_DIR)/run-shell"
+	@set -e; for script in $(INSTALL_SCRIPTS); do \
+		install -m 0755 "$(REPO_DIR)/bin/$$script" "$(INSTALL_DIR)/$$script"; \
+		echo "Installed $(INSTALL_DIR)/$$script"; \
+	done
 	@echo "Add $(INSTALL_DIR) to PATH if needed"
 
 networks:

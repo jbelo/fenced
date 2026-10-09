@@ -22,6 +22,7 @@ Options:
   --agenthome NAME   Docker volume name for the agent home. Defaults to agenthome.
   --gomodcache NAME  Docker volume name for the Go module cache. Defaults to gomodcache.
   --no-egress-proxy  Disable the Squid egress proxy for this session.
+  --no-tmux         Start plain Bash instead of the default tmux session.
   --docker-arg ARG   Extra argument to pass to docker run before the image name.
                      Repeat for multi-token Docker options such as -v HOST:CONTAINER.
   -h, --help         Show this help.
@@ -48,6 +49,7 @@ gid="$(id -g)"
 extra_docker_args=()
 workspace_readonly=0
 writable_workspace_paths=()
+start_tmux=1
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -87,6 +89,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --no-egress-proxy)
       egress_proxy_enable=0
+      shift
+      ;;
+    --no-tmux)
+      start_tmux=0
       shift
       ;;
     --docker-arg)
@@ -215,6 +221,7 @@ docker_args=(
   --mount "type=volume,src=$agenthome_vol,target=$agent_home"
   --mount "type=volume,src=$gomodcache_vol,target=/go/pkg/mod"
   -e "HOME=$agent_home"
+  -e SHELL=/bin/bash
   -w "$container_root/$subdir"
 )
 
@@ -231,7 +238,14 @@ if [ "$egress_proxy_enable" != "0" ]; then
   )
 fi
 
+# Keep a shell alive after detaching: exiting the container's main process would
+# remove this ephemeral container and kill its tmux server and applications.
+shell_command='export PATH="$HOME/.local/bin:$PATH"; exec /bin/bash'
+if [ "$start_tmux" = 1 ]; then
+  shell_command='export PATH="$HOME/.local/bin:$PATH"; if [ -t 0 ] && [ -t 1 ] && command -v tmux >/dev/null 2>&1; then tmux new-session -A -s agent -c "$PWD"; fi; exec /bin/bash'
+fi
+
 exec docker run "${docker_args[@]}" "${extra_docker_args[@]}" \
   -e "NPM_CONFIG_PREFIX=$agent_home/.local" \
   "$agent_image" \
-  bash -c 'export PATH="$HOME/.local/bin:$PATH"; exec bash'
+  bash -c "$shell_command"

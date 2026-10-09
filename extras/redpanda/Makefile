@@ -12,7 +12,7 @@ REDPANDA_SMP ?= 1
 AGENT_INTERNAL_NETWORK ?= go-agent-internal-net
 AGENT_IMAGE ?= go-agent
 AGENT_REDPANDA_IMAGE ?= go-agent-redpanda
-AGENT_REDPANDA_DOCKERFILE ?= $(ROOT_DIR)/extras/redpanda/Dockerfile.agent-redpanda
+AGENT_REDPANDA_DOCKERFILE ?= $(ROOT_DIR)/extras/redpanda/Dockerfile
 
 .PHONY: help networks redpanda-up redpanda-down redpanda-logs redpanda-rpk redpanda-ready redpanda-clean-data agent-redpanda-build
 
