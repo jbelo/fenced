@@ -1,13 +1,18 @@
-# Sandboxed Go Project Agent Environment
+# Fenced, a development-agent harness
 
-This repository provides a Docker-based environment for running a coding agent against Go project workspaces with two goals:
+Fenced provides coding agents with tools, persistent state, and controlled access
+to services within an otherwise isolated container environment. Developers choose
+which workspaces, capabilities, and network destinations agents can access.
 
-- **internal containment**: limit what the agent can read and write from the host
-- **external egress control**: route outbound Internet access through a controlled proxy
+## What the harness provides
 
-It currently targets [Pi](https://pi.dev/) and is also customized for OpenAI / Codex CLI model access, but the overall harness shape should be easy to adapt to other coding-agent CLIs and model backends.
+- A Go-oriented base image with development tools and coding-agent CLIs.
+- Shell and tmux launchers with selected workspace mounts and persistent home/cache volumes.
+- Controlled outbound networking through a destination-allowlisted proxy.
+- Installed context and skills explaining the environment and available capabilities.
+- [Optional extras](extras/README.md) for additional agent tooling and supporting services.
 
-The agent does not run directly on the developer machine. Instead, it runs inside a constrained container with a limited workspace mount and proxy-mediated network access.
+The harness supplies the execution environment, the coding agent runs inside it, not directly on the developer machine.
 
 ## Security model
 
@@ -24,6 +29,14 @@ The agent session runs in a container with:
 - no access to unrelated host directories unless explicitly mounted
 
 This is intended to reduce the risk of unintended file access, credential disclosure, or accidental modification outside the workspace you choose to expose.
+
+### Trust boundary
+
+The host and Docker administrator are trusted. Isolation limits access outside
+the resources you expose; it does not protect writable workspace files from the
+agent or isolate sessions that share the same home volume and credentials.
+Reachable development services have their own access controls; sharing an
+internal network does not make them safe or mutually isolated. Additional mounts or Docker options can widen the boundary.
 
 ### External egress control
 
@@ -203,23 +216,21 @@ and nested tmux sessions as well as its own selections.
 
 ## Harness context for agents
 
-`make init-volumes` installs the harness context and bundled reference documents
-into the persistent agent home volume:
+`make init-volumes` installs the harness context, bundled references, and skills into the persistent agent home volume:
 
 ```text
 /home/agent/.go-agent-harness.md
 /home/agent/.go-agent-harness/extras/AGENT.md
+/home/agent/.agents/skills/<skill-name>/SKILL.md
 ```
 
-The context points to local reference copies, so agents do not need access to
-this repository. `extras/agent-docs.list` explicitly selects agent-facing usage
-guides to copy, preserving their directory structure. Host setup instructions,
-service templates, runtime secrets, and data are not copied. These generated
-references are overwritten on refresh; keep personal notes separately.
-Previously installed references explicitly listed in `extras/agent-docs-retired.list`
-are removed during refresh; other agent-home files are preserved.
+The context and extras overview help agents discover available capabilities;
+installed skills provide detailed usage instructions without requiring access to this repository. `extras/agent-docs.list` selects reference files, preserving their directory structure, and `extras/agent-skills.list` selects skills to install.
+Host setup instructions, service templates, runtime secrets, and data are not
+copied. Refresh replaces the listed files but does not remove older references
+or skills; keep personal notes separately.
 
-Refresh the context and bundled references without reinitializing volumes:
+Refresh the context, references, and skills without reinitializing volumes:
 
 ```sh
 make install-agent-context
@@ -465,17 +476,12 @@ This setup runs Squid as the non-privileged `proxy` user and prepares the requir
 
 The proxy runs from a small repo-owned image defined in `Dockerfile.squid` rather than relying on upstream container entrypoint behavior.
 
-## Optional addons
+## Optional extras
 
-Optional, project-specific integrations live under `extras/`.
-
-Current addons:
-
-- `extras/foundationdb/README.md` — run a FoundationDB container on the internal agent network, install the cluster file into `agenthome`, and optionally build an agent image with FoundationDB client libraries
-- `extras/kms/README.md` — build and run one or two KMS zones on the internal agent network
-- `extras/redpanda/README.md` — run a Redpanda Kafka-compatible broker on the internal agent network and optionally build an agent image with `rpk`
-- `extras/obsidian-project-manager/` — install a Codex skill for creating and updating Obsidian Project Manager Markdown task files
-- `extras/obsidian-dataview-tasks/` — install a Codex skill for Markdown tickets, Dataview dashboards, and Tasks query blocks
+Extras extend agent images with tools, provide separate service containers, or
+install agent guidance. See the [extras overview](extras/README.md) for available
+capabilities and their setup instructions. Extra-specific configuration and
+documentation stay under `extras/`.
 
 ## Task tracking
 
