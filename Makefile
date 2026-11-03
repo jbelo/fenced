@@ -97,6 +97,16 @@ install-agent-context: volumes
 				destination="$(AGENT_HOME)/.agents/skills/$$skill"; \
 				install -d -m 0755 -o $(UID) -g $(GID) "$$destination"; \
 				install -m 0644 -o $(UID) -g $(GID) "/tmp/harness-extras/$$relative/SKILL.md" "$$destination/SKILL.md"; \
+				if [ -f "/tmp/harness-extras/$$relative/resources.list" ]; then \
+					while IFS= read -r resource || [ -n "$$resource" ]; do \
+						[ -n "$$resource" ] || continue; \
+						case "$$resource" in /*|..|../*|*/../*|*/..) echo "Invalid skill resource: $$resource" >&2; exit 1;; esac; \
+						source="/tmp/harness-extras/$$relative/$$resource"; \
+						[ -f "$$source" ] && [ ! -L "$$source" ] || { echo "Invalid skill resource: $$resource" >&2; exit 1; }; \
+						install -d -m 0755 -o $(UID) -g $(GID) "$$(dirname "$$destination/$$resource")"; \
+						install -m 0644 -o $(UID) -g $(GID) "$$source" "$$destination/$$resource"; \
+					done < "/tmp/harness-extras/$$relative/resources.list"; \
+				fi; \
 			done < /tmp/harness-extras/agent-skills.list'
 	@echo "Installed harness context and reference docs in volume $(AGENTHOME)"
 
@@ -114,6 +124,11 @@ install:
 	@set -e; for script in $(INSTALL_SCRIPTS); do \
 		install -m 0755 "$(REPO_DIR)/bin/$$script" "$(INSTALL_DIR)/$$script"; \
 		echo "Installed $(INSTALL_DIR)/$$script"; \
+	done
+	@mkdir -p "$(INSTALL_DIR)/run-shell.d"
+	@set -e; for hook in "$(REPO_DIR)"/extras/*/run-shell.d/*.sh; do \
+		[ -f "$$hook" ] || continue; \
+		install -m 0644 "$$hook" "$(INSTALL_DIR)/run-shell.d/"; \
 	done
 	@echo "Add $(INSTALL_DIR) to PATH if needed"
 
@@ -159,6 +174,21 @@ egress-verify: egress-init
 	else \
 		echo "Denied destination correctly blocked"; \
 	fi
+
+.PHONY: egress-go-verify
+egress-go-verify:
+	docker run --rm --network $(AGENT_INTERNAL_NETWORK) --read-only \
+		--tmpfs /tmp:rw,mode=1777 \
+		-e HTTPS_PROXY=http://$(EGRESS_PROXY_CONTAINER):3128 \
+		-e HTTP_PROXY=http://$(EGRESS_PROXY_CONTAINER):3128 \
+		-e HOME=/tmp -e GOPATH=/tmp/go -e GOCACHE=/tmp/build-cache \
+		-e GOMODCACHE=/tmp/go/pkg/mod \
+		-e GOPROXY=https://proxy.golang.org -e GOSUMDB=sum.golang.org \
+		-e GOTOOLCHAIN=local $(AGENT_IMAGE) sh -ec '\
+		curl -fsS https://sum.golang.org/lookup/golang.org/x/text@v0.14.0 >/dev/null; \
+		go mod download -json golang.org/x/text@v0.14.0; \
+		code=$$(curl -sS -o /dev/null -w "%{http_connect}" https://example.com 2>/dev/null || true); \
+		test "$$code" = 403'
 
 clean:
 	-docker volume rm $(AGENTHOME)

@@ -1,7 +1,11 @@
 agent-public-api-runtime/skills/public-api-run
 foundationdb/skills/foundationdb-connect
 kms/skills/kms-connect
+kms/skills/kms-run
 redpanda/skills/redpanda-connect
 xks-test-proxy/skills/xks-test-proxy-use
 cassandra/skills/cassandra-connect
 agent-public-api/skills/public-api-clojure
+terraform/skills/terraform-exoscale-run
+openbao/skills/openbao-connect
+agent-gateway/skills/agent-gateway

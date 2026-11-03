@@ -14,7 +14,9 @@ Options:
   --subdir PATH      Subdirectory inside /workspace to use as the working directory.
                      Defaults to .
   --workspace-readonly
-                     Mount the workspace root read-only.
+                     Mount the workspace root read-only (default).
+  --workspace-readwrite
+                     Mount the whole workspace root read-write.
   --workspace-rw PATH
                      Mount a workspace subdirectory read-write. Repeat as needed.
                      PATH may be relative to the workspace root or absolute under it.
@@ -30,6 +32,10 @@ Options:
 Environment variables used as defaults:
   WORKSPACE_ROOT, HOST_ROOT, SUBDIR, AGENT_IMAGE, AGENTHOME, GOMODCACHE,
   EGRESS_PROXY_ENABLE, AGENT_INTERNAL_NETWORK, EGRESS_PROXY_URL, NO_PROXY
+  WORKSPACE_RW_ENABLE: true/1 enables whole-workspace writes; false/0 is default.
+  WORKSPACE_RW_PATHS: colon-separated writable paths under the workspace; default empty.
+                     Relative or absolute paths; added to any --workspace-rw flags.
+  Explicit --workspace-readonly/--workspace-readwrite flags override this default.
 EOF
 }
 
@@ -47,8 +53,18 @@ no_proxy_value="${NO_PROXY:-localhost,127.0.0.1}"
 uid="$(id -u)"
 gid="$(id -g)"
 extra_docker_args=()
-workspace_readonly=0
+case "${WORKSPACE_RW_ENABLE:-false}" in
+  true|1) workspace_readonly=0 ;;
+  false|0) workspace_readonly=1 ;;
+  *) echo 'error: WORKSPACE_RW_ENABLE must be true, false, 1, or 0' >&2; exit 1 ;;
+esac
 writable_workspace_paths=()
+if [[ -n "${WORKSPACE_RW_PATHS:-}" ]]; then
+  case "$WORKSPACE_RW_PATHS" in
+    :*|*:|*::*|*$'\n'*) echo 'error: WORKSPACE_RW_PATHS must contain nonempty colon-separated paths on one line' >&2; exit 1 ;;
+  esac
+  IFS=: read -r -a writable_workspace_paths <<< "$WORKSPACE_RW_PATHS"
+fi
 start_tmux=1
 
 while [ "$#" -gt 0 ]; do
@@ -65,6 +81,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --workspace-readonly)
       workspace_readonly=1
+      shift
+      ;;
+    --workspace-readwrite)
+      workspace_readonly=0
       shift
       ;;
     --workspace-rw)
@@ -177,7 +197,17 @@ EOF
     writable_target="$container_root/$writable_rel_path"
   fi
 
-  writable_workspace_mounts+=("--mount" "type=bind,src=$writable_host_path,target=$writable_target")
+  # The environment and CLI may select the same directory. Mount it only once.
+  writable_mount="type=bind,src=$writable_host_path,target=$writable_target"
+  already_mounted=0
+  for existing_mount in "${writable_workspace_mounts[@]}"; do
+    [[ "$existing_mount" != "$writable_mount" ]] || already_mounted=1
+  done
+  if [[ "$already_mounted" = 0 && "$writable_rel_path" != . ]]; then
+    writable_workspace_mounts+=("--mount" "$writable_mount")
+  elif [[ "$writable_rel_path" = . ]]; then
+    workspace_mount="type=bind,src=$workspace_root,target=$container_root"
+  fi
 done
 
 container_name_suffix="$(basename "$subdir")"
@@ -222,6 +252,8 @@ docker_args=(
   --mount "type=volume,src=$gomodcache_vol,target=/go/pkg/mod"
   -e "HOME=$agent_home"
   -e SHELL=/bin/bash
+  -e LANG=C.UTF-8
+  -e LC_CTYPE=C.UTF-8
   -w "$container_root/$subdir"
 )
 
@@ -237,6 +269,17 @@ if [ "$egress_proxy_enable" != "0" ]; then
     -e NODE_USE_ENV_PROXY=1
   )
 fi
+
+# Extra-owned launch hooks may append to docker_args using the resolved agent_home.
+launcher_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+launch_hooks=("$launcher_dir"/run-shell.d/*.sh)
+if [[ -d "$launcher_dir/../extras" ]]; then
+  launch_hooks=("$launcher_dir"/../extras/*/run-shell.d/*.sh)
+fi
+for launch_hook in "${launch_hooks[@]}"; do
+  [[ -f "$launch_hook" ]] || continue
+  source "$launch_hook"
+done
 
 # Keep a shell alive after detaching: exiting the container's main process would
 # remove this ephemeral container and kill its tmux server and applications.

@@ -28,6 +28,12 @@ Options:
                      Repeat for multi-token Docker options such as -v HOST:CONTAINER.
   -h, --help         Show this help.
 
+Environment:
+  WORKSPACE_RW_ENABLE: true/1 enables whole-workspace writes; false/0 is default.
+  WORKSPACE_RW_PATHS: colon-separated writable paths under the workspace; default empty.
+                     Adds to the writable start directory or explicit --workspace-rw paths.
+  Explicit --workspace-readonly/--workspace-readwrite flags override this default.
+
 Examples:
   story-shell
   story-shell stories/my-story
@@ -40,7 +46,11 @@ agent_image="${AGENT_IMAGE:-}"
 start_dir=""
 extra_docker_args=()
 shell_options=()
-workspace_readonly=1
+case "${WORKSPACE_RW_ENABLE:-false}" in
+  true|1) workspace_readonly=0 ;;
+  false|0) workspace_readonly=1 ;;
+  *) echo 'error: WORKSPACE_RW_ENABLE must be true, false, 1, or 0' >&2; exit 1 ;;
+esac
 writable_workspace_paths=()
 
 while [ "$#" -gt 0 ]; do
@@ -184,6 +194,8 @@ if [ "$workspace_readonly" = "1" ]; then
   for writable_path in "${writable_workspace_paths[@]}"; do
     run_shell_args+=(--workspace-rw "$writable_path")
   done
+else
+  run_shell_args+=(--workspace-readwrite)
 fi
 
 run_shell_args+=("${shell_options[@]}" "${extra_docker_args[@]}")

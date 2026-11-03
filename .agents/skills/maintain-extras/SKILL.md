@@ -51,7 +51,10 @@ copy those READMEs wholesale or link agents to uninstalled host documents. Keep
 `extras/AGENT.md` as a discovery overview. Put detailed agent usage in
 `extras/<extra>/skills/<skill-name>/SKILL.md` and register the directory in
 `extras/agent-skills.list`. Each skill must be self-contained: the installer
-copies only its `SKILL.md` to `$HOME/.agents/skills/<skill-name>/SKILL.md`.
+copies its `SKILL.md` to `$HOME/.agents/skills/<skill-name>/SKILL.md` and any
+supporting files explicitly listed in that skill's `resources.list` (one relative
+file path per line). Preserve those relative paths inside the installed skill.
+List only intentional regular files; no secrets, symlinks, or entire directories.
 Simple image additions need only an overview entry, not a separate skill.
 
 Only add intentional, regular reference files within `extras/` to the manifest.

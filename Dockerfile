@@ -1,4 +1,4 @@
-FROM golang:1.27.1-bookworm AS git-builder
+FROM golang:1.27.3-bookworm AS git-builder
 
 ARG GIT_VERSION=2.48.1
 ARG TMUX_VERSION=3.7c
@@ -33,7 +33,7 @@ RUN curl -fL "https://github.com/tmux/tmux/releases/download/${TMUX_VERSION}/tmu
     make install && \
     rm -rf /tmp/tmux.tar.gz "/tmp/tmux-${TMUX_VERSION}"
 
-FROM golang:1.27.1-bookworm
+FROM golang:1.27.3-bookworm
 
 RUN echo "deb http://deb.debian.org/debian bookworm-backports main" > /etc/apt/sources.list.d/bookworm-backports.list
 
@@ -73,3 +73,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-client 
     && rm -rf /var/lib/apt/lists/*
 COPY scripts/ssh.sh /usr/local/bin/ssh
 RUN chmod 0755 /usr/local/bin/ssh
+
+# Template/story setup uses rsync to copy into writable workspaces.
+RUN apt-get update && apt-get install -y --no-install-recommends rsync \
+    && rm -rf /var/lib/apt/lists/*

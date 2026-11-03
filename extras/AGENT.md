@@ -10,18 +10,31 @@ These installed files are self-contained; access to the fenced checkout is not n
 
 | Extra | Purpose / default endpoint | Skill |
 | --- | --- | --- |
+| Agent gateway | Synthetic mock GitHub/Shortcut reads; `http://agent-gateway:8080`; `agentctl` in gateway/all images | `agent-gateway` |
 | Cassandra | Identities/API keys in `idstore`; `go-agent-cassandra:9042` | `cassandra-connect` |
+| OpenBao | Disposable secrets API: HTTP `go-agent-openbao:8200`; separate verified TLS `go-agent-openbao-tls:8443`, CA/token in `$HOME/.openbao-test/` | `openbao-connect` |
 | FoundationDB | Database storage; use `$HOME/.fdb.cluster`, not just `go-agent-fdb:4500` | `foundationdb-connect` |
 | KMS | GVA: `http://go-agent-kms-gva2:8080`; FRA: `http://go-agent-kms-fra1:8080` | `kms-connect` |
+| Native KMS | Requested process startup with supplied binary/material and explicit FDB namespace | `kms-run` |
+| Terraform | Local provider testing, SDK discovery, authorized plans and test runs | `terraform-exoscale-run` |
 | Redpanda | Kafka-compatible broker; `go-agent-redpanda:9092` | `redpanda-connect` |
 | XKS test proxy | TLS/SigV4 test keystore; `https://xks-proxy.test:19443`; authorized root SSH | `xks-test-proxy-use` |
-| Public API runtime | Host-built JAR running inside your agent container | `public-api-run` |
+| Public API runtime | Run a host-built JAR; prepare local config when explicitly requested | `public-api-run` |
 | Public API tooling | Clojure CLI with host-prepared repo-local dependency caches | `public-api-clojure` |
 
 Image additions are separate from services: OpenSSL adds development libraries,
 FoundationDB adds clients, and Redpanda adds `rpk`. `go-agent-java` adds Java 25;
-`go-agent-all` combines these tools with the Java runtime, without Clojure tooling.
+`go-agent-all` combines these tools with the Java runtime, Terraform 1.11.4, and OpenBao 2.7.1 `bao`, without Clojure tooling.
 Check tool availability before assuming it exists.
+When the host Memty template is available, standard shell launchers mount it; `$HOME/memty` is a read-only host template.
+Read its guidance and copy only needed template content into an authorized
+writable story directory, preserving existing files. It contains project-specific
+references and skills, not just empty templates. Report a missing mount to the
+developer; it is optional and its nested skills are not installed globally.
+`go-agent-terraform` adds Terraform 1.11.4 (`terraform version`). Providers,
+modules, backend access, and credentials are project-specific prerequisites;
+the default egress proxy does not allow Terraform registry/release downloads.
+Report missing prerequisites to the developer.
 
 Service data and the agent home are persistent state. Do not reset them unless
 asked. This overview and installed skills are refreshed from repository sources;

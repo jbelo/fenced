@@ -196,7 +196,8 @@ volume only when the destination is missing. Existing files and symlinks are
 preserved, so reinitializing volumes does not overwrite your customizations.
 The installed file is owned by your host UID/GID.
 New tmux sessions and panes start non-login Bash, preserving the container's
-toolchain `PATH`.
+toolchain `PATH`. The launcher sets `LANG=C.UTF-8` and `LC_CTYPE=C.UTF-8`
+in the container environment, inherited by tmux sessions and panes.
 
 After recreating the agent home volume, run `make init-volumes` to restore it.
 To install just the missing tmux configuration, run:
@@ -344,8 +345,37 @@ the whole workspace root is writable:
 story-shell --workspace-readwrite stories/<story>/<worktree>
 ```
 
-The lower-level `run-shell` keeps the older default unless you pass
-`--workspace-readonly` explicitly.
+Both launchers default `WORKSPACE_RW_ENABLE` to `false`. Set it to `true` (or `1`)
+to make the entire workspace writable, including sibling repositories' Git
+metadata:
+
+```sh
+WORKSPACE_RW_ENABLE=true story-shell stories/<story>/<worktree>
+WORKSPACE_RW_ENABLE=true run-shell --workspace-root /path/to/workspace/root
+```
+
+`false` and `0` disable whole-workspace writes. Explicit `--workspace-readonly`
+or `--workspace-readwrite` flags override the environment setting. The lower-level
+`run-shell` now defaults to read-only too; use `--workspace-rw PATH` for selective
+writes. `story-shell` still grants writes to its start directory by default.
+This setting does not change the read-only Memty mount or resolve Git worktree
+path differences between host and container. Existing containers must be relaunched.
+
+To keep other repositories read-only, leave `WORKSPACE_RW_ENABLE=false` and list
+only the writable paths in `WORKSPACE_RW_PATHS` (empty by default):
+
+```sh
+WORKSPACE_RW_PATHS=kms:public-api story-shell stories/my-story
+WORKSPACE_RW_PATHS=kms run-shell --workspace-root "$HOME/exoscale"
+```
+
+Paths are colon-separated, relative to the workspace root or absolute beneath it;
+spaces are supported, colons and newlines in path names are not. Paths must already
+exist and resolve inside the workspace. The list adds to `--workspace-rw` flags;
+`story-shell` also keeps its usual writable start directory when no such flags are
+given. Unlisted paths stay read-only unless whole-workspace writes are enabled
+(or the workspace root itself is listed). Listing a repository grants writes to
+its files and Git metadata.
 
 Pass extra `docker run` arguments with repeated `--docker-arg` options. Each Docker
 argument token should be passed separately:
@@ -457,6 +487,20 @@ Current Squid allowlist covers CONNECT access to:
 - `*.claude.com`
 - `*.claude.ai`
 - `*.sentry.io`
+- `proxy.golang.org`, `sum.golang.org`, and `storage.googleapis.com` for public
+  Go module downloads, checksum verification, and redirected module ZIPs.
+  These are exact hosts. HTTPS CONNECT filtering allows all paths on each host,
+  including other buckets on `storage.googleapis.com`.
+
+Go clients can use `GOPROXY=https://proxy.golang.org` and `GOSUMDB=sum.golang.org`
+through the shell's existing proxy environment. Direct VCS fallback and private
+module hosts still require separate access; checksum verification stays enabled.
+After changing `squid.conf`, validate and reload the running proxy with
+`docker exec go-agent-egress-proxy squid -k parse` followed by
+`docker kill --signal=HUP go-agent-egress-proxy` (reload only; Squid runs as PID 1,
+which its `-k reconfigure` command rejects). No agent image rebuild
+or shell restart is needed. Run `make egress-go-verify` to check fresh downloads
+and checksum verification through the existing proxy.
 
 Validate the setup:
 
