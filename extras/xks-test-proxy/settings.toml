@@ -1,0 +1,55 @@
+# Local test fixtures only; never use these credentials or SoftHSM keys in production.
+[server]
+ip = "0.0.0.0"
+port = 19443
+region = "ch-gva-2"
+service = "kms-xks-proxy"
+
+[security]
+is_sigv4_auth_enabled = true
+is_tls_enabled = true
+is_mtls_enabled = false
+
+[tls]
+tls_cert_pem = "/certs/server.pem"
+tls_key_pem = "/certs/server-key.pem"
+
+[[external_key_stores]]
+uri_path_prefix = "/example/uri/path/prefix"
+sigv4_access_key_id = "BETWEEN2TENAND3TENCHARACTERS"
+sigv4_secret_access_key = "PleaseReplaceThisWithSomeSecretOfLength43To64"
+xks_key_id_set = ["foo"]
+
+[server.tcp_keepalive]
+tcp_keepalive_secs = 60
+tcp_keepalive_retries = 3
+tcp_keepalive_interval_secs = 1
+
+[tracing]
+is_stdout_writer_enabled = true
+is_file_writer_enabled = true
+directory = "/var/log/xks-proxy"
+file_prefix = "xks-proxy.log"
+rotation_kind = "HOURLY"
+level = "INFO"
+
+[pkcs11]
+session_pool_max_size = 30
+session_pool_timeout_milli = 0
+session_eager_close = false
+user_pin = "1234"
+PKCS11_HSM_MODULE = "/usr/lib/softhsm/libsofthsm2.so"
+context_read_timeout_milli = 10
+
+[pkcs11_logger]
+PKCS11_LOGGER_LIBRARY_PATH = ""
+PKCS11_LOGGER_LOG_FILE_PATH = ""
+PKCS11_LOGGER_FLAGS = "0"
+
+[limits]
+max_plaintext_in_base64 = 8192
+max_aad_in_base64 = 16384
+
+[hsm_capabilities]
+can_generate_iv = false
+is_zero_iv_required = false

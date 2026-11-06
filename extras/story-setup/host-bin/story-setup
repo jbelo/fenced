@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+"""Apply a declarative agent worktree request using host Git credentials."""
+import argparse
+import hashlib
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+
+class SetupError(Exception):
+    pass
+
+
+def require(ok, message):
+    if not ok:
+        raise SetupError(message)
+
+
+def git(repo, *args, optional=False):
+    proc = subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', '-C', str(repo), *args],
+                          capture_output=True, text=True)
+    if proc.returncode and not optional:
+        raise SetupError('Git failed: ' + ' '.join(args[:2]) + '\n' + proc.stderr.strip())
+    return proc.stdout.strip() if proc.returncode == 0 else None
+
+
+def safe_path(root, relative):
+    require(isinstance(relative, str) and relative and not relative.startswith('/'), 'Expected relative path')
+    parts = relative.split('/')
+    require(all(p not in ('', '.', '..') for p in parts), 'Invalid path component')
+    path = root
+    for part in parts:
+        path = path / part
+        require(not path.is_symlink(), 'Symlink paths are not supported: ' + relative)
+    require(path.resolve().is_relative_to(root), 'Path escapes workspace')
+    return path
+
+
+def unique(pairs):
+    result = {}
+    for key, value in pairs:
+        require(key not in result, 'Duplicate JSON field: ' + key)
+        result[key] = value
+    return result
+
+
+def tmux(*args):
+    proc = subprocess.run(['tmux', *args], capture_output=True, text=True)
+    require(proc.returncode == 0, 'tmux failed: ' + proc.stderr.strip())
+    return proc.stdout.strip()
+
+
+def window_spec(data, request):
+    if 'tmux' not in data:
+        return None  # Existing version-1 Git-only requests remain valid.
+    spec = data['tmux']
+    require(isinstance(spec, dict) and set(spec) == {'session', 'window'}, 'Expected tmux session and window')
+    for value in spec.values():
+        require(isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', value), 'Invalid tmux name')
+    return spec
+
+
+def check_window(spec):
+    tmux('has-session', '-t', '=' + spec['session'])
+    names = tmux('list-windows', '-t', '=' + spec['session'], '-F', '#{window_name}').splitlines()
+    require(spec['window'] not in names, 'Host tmux window already exists: ' + spec['window'])
+
+
+def create_window(spec, directory):
+    check_window(spec)
+    # Explicit executable avoids tmux default-command and any request-supplied command.
+    output = tmux('new-window', '-d', '-P', '-F', '#{session_id} #{window_id} #{pane_id}',
+                  '-t', spec['session'] + ':', '-n', spec['window'], '-c', str(directory), '/bin/bash')
+    session_id, window_id, pane_id = output.split()
+    record = dict(spec, session_id=session_id, window_id=window_id, pane_id=pane_id,
+                  directory=str(directory), status='complete')
+    # Store IDs before any further operations; no shell text is sent to the pane.
+    return record
+
+
+def retry_window(root, request, session=None, window=None):
+    root = root.expanduser().resolve(strict=True)
+    request = Path(os.path.abspath(request.expanduser()))
+    require(request.is_relative_to(root), 'Request must be under workspace root')
+    request = safe_path(root, request.relative_to(root).as_posix())
+    require(request.parent.parent == root / 'stories', 'Request must be in stories/<workspace>')
+    raw = request.read_bytes(); data = json.loads(raw, object_pairs_hook=unique)
+    spec = window_spec(data, request)
+    require((session is None) == (window is None), 'Supply both --session and --window')
+    supplied = window_spec({'tmux': {'session': session, 'window': window}}, request) if session is not None else None
+    require(not (spec and supplied), 'Request already defines tmux; do not override it')
+    receipt = request.with_name(request.name + '.result.json')
+    fd = os.open(receipt, os.O_RDWR | os.O_NOFOLLOW)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with os.fdopen(os.dup(fd), 'r') as stream:
+            result = json.load(stream)
+        require(result.get('request_sha256') == hashlib.sha256(raw).hexdigest(), 'Request differs from receipt')
+        require(result.get('git_status') == 'complete' or
+                ('git_status' not in result and result.get('status') == 'complete'),
+                'Git setup is not complete; window retry refused')
+        previous = result.get('window_request')
+        if previous:
+            previous = window_spec({'tmux': previous}, request)
+            require(supplied is None or supplied == previous, 'Receipt already records different tmux settings')
+        spec = spec or supplied or previous
+        require(spec is not None, 'For a completed Git-only request supply --session and --window')
+        if result.get('tmux', {}).get('status') == 'complete':
+            raise SetupError('Window already recorded; inspect its ID rather than creating another')
+        require(len(result['worktrees']) == len(data['worktrees']), 'Incomplete worktree receipt')
+        for row, record in zip(data['worktrees'], result['worktrees']):
+            require(row['destination'] == record['destination'], 'Receipt destination mismatch')
+            dest = safe_path(root, row['destination'])
+            require(git(dest, 'rev-parse', 'HEAD') == record['commit'], 'Worktree HEAD changed')
+            require(git(dest, 'symbolic-ref', '--short', 'HEAD') == row['branch'], 'Worktree branch changed')
+        # Save the operator's migration settings separately; the request/hash stay unchanged.
+        result['git_status'] = 'complete'
+        if 'tmux' not in data:
+            result['window_request'] = spec
+        try:
+            result['tmux'] = create_window(spec, request.parent)
+            result['status'] = 'complete'; result.pop('error', None)
+        except Exception as error:
+            result['status'] = 'tmux_failed'; result['error'] = str(error)
+            raise
+        finally:
+            os.lseek(fd, 0, os.SEEK_SET); os.ftruncate(fd, 0)
+            os.write(fd, (json.dumps(result, indent=2) + '\n').encode()); os.fsync(fd)
+    finally:
+        os.close(fd)
+    print(str(receipt))
+
+
+def apply(root, request):
+    root = root.expanduser().resolve(strict=True)
+    request = Path(os.path.abspath(request.expanduser()))
+    require(request.is_relative_to(root), 'Request must be under workspace root')
+    request = safe_path(root, request.relative_to(root).as_posix())
+    require(request.is_file() and request.stat().st_size <= 65536, 'Request must be a regular file <=64 KiB')
+    raw = request.read_bytes()
+    data = json.loads(raw, object_pairs_hook=unique)
+    require(isinstance(data, dict) and {'version', 'worktrees'} <= set(data) <= {'version', 'worktrees', 'tmux'} and type(data['version']) is int and data['version'] == 1, 'Expected version 1 and worktrees')
+    spec = window_spec(data, request)
+    rows = data['worktrees']
+    require(isinstance(rows, list) and 1 <= len(rows) <= 20, 'Expected 1–20 worktrees')
+    plans, destinations, branches = [], set(), set()
+    for row in rows:
+        require(isinstance(row, dict) and set(row) <= {'repository', 'destination', 'branch', 'base', 'mode', 'expected_commit'} and {'repository', 'destination', 'branch', 'base', 'mode'} <= set(row), 'Invalid worktree fields')
+        name = row['repository']
+        require(isinstance(name, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', name) and name != 'stories', 'Invalid repository name')
+        repo = safe_path(root, name)
+        require(repo.is_dir() and git(repo, 'rev-parse', '--show-toplevel') == str(repo), 'Repository must be an existing workspace-root checkout')
+        common = Path(git(repo, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+        require(common.resolve().is_relative_to(root), 'Git metadata must be inside workspace root')
+        safe_path(root, common.relative_to(root).as_posix())
+        dest = safe_path(root, row['destination'])
+        require(dest.parent == request.parent and request.parent.parent == root / 'stories', 'Destinations must be siblings of request in stories/<workspace>')
+        require(not dest.exists() and dest not in destinations, 'Destination collision')
+        require(row['mode'] in ('new', 'existing'), 'mode must be new or existing')
+        for key in ('branch', 'base'):
+            require(isinstance(row[key], str) and not row[key].startswith('-') and git(repo, 'check-ref-format', '--branch', row[key], optional=True) == row[key], 'Invalid ' + key)
+        require((name, row['branch']) not in branches, 'Duplicate branch')
+        if 'expected_commit' in row:
+            require(isinstance(row['expected_commit'], str) and re.fullmatch('[0-9a-f]{40}|[0-9a-f]{64}', row['expected_commit']), 'Invalid expected_commit')
+        destinations.add(dest); branches.add((name, row['branch']))
+        plans.append((row, repo, dest))
+    if spec:
+        check_window(spec)
+    result_path = request.with_name(request.name + '.result.json')
+    # Exclusive receipt prevents accidental replay, concurrent apply and symlink overwrite.
+    fd = os.open(result_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    result = {'version': 1, 'request_sha256': hashlib.sha256(raw).hexdigest(), 'status': 'in_progress', 'worktrees': []}
+    def save():
+        os.lseek(fd, 0, os.SEEK_SET); os.ftruncate(fd, 0)
+        os.write(fd, (json.dumps(result, indent=2) + '\n').encode()); os.fsync(fd)
+    save()
+    try:
+        statuses = {repo: git(repo, 'status', '--porcelain=v1') for _, repo, _ in plans}
+        for repo in statuses:
+            git(repo, 'fetch', 'origin', '--prune')
+        resolved = []
+        for row, repo, dest in plans:
+            branch = row['branch']; remote = 'refs/remotes/origin/' + row['base']
+            commit = git(repo, 'rev-parse', '--verify', remote + '^{commit}')
+            if row.get('expected_commit'):
+                require(commit == row['expected_commit'], 'Remote commit changed; refresh request')
+            local = git(repo, 'rev-parse', '--verify', 'refs/heads/' + branch + '^{commit}', optional=True)
+            remote_branch = git(repo, 'rev-parse', '--verify', 'refs/remotes/origin/' + branch + '^{commit}', optional=True)
+            used = git(repo, 'worktree', 'list', '--porcelain').splitlines()
+            require('branch refs/heads/' + branch not in used, 'Branch already checked out')
+            if row['mode'] == 'new':
+                require(local is None and remote_branch is None, 'New branch already exists')
+            else:
+                require(branch == row['base'], 'Existing mode requires branch == base')
+                require(local is None or local == commit, 'Existing local branch differs from remote')
+            resolved.append((row, repo, dest, commit, local))
+        for row, repo, dest, commit, local in resolved:
+            safe_path(root, row['destination']); require(not dest.exists(), 'Destination appeared during setup')
+            if local is None:
+                git(repo, 'worktree', 'add', '--no-track', '-b', row['branch'], str(dest), commit)
+            else:
+                git(repo, 'worktree', 'add', str(dest), row['branch'])
+            # Record partial creation before subsequent verification can fail.
+            record = {'repository': row['repository'], 'destination': row['destination'], 'branch': row['branch'], 'commit': commit}
+            result['worktrees'].append(record); save()
+            if row['mode'] == 'existing':
+                git(dest, 'branch', '--set-upstream-to=origin/' + row['base'])
+            pointer = dest / '.git'
+            metadata = Path(git(dest, 'rev-parse', '--absolute-git-dir'))
+            require(metadata.resolve().is_relative_to(root), 'Worktree metadata escaped root')
+            pointer.write_text('gitdir: ' + os.path.relpath(metadata, dest) + '\n')
+            require(git(dest, 'rev-parse', 'HEAD') == commit, 'Unexpected HEAD')
+            require(git(dest, 'symbolic-ref', '--short', 'HEAD') == row['branch'], 'Unexpected branch')
+            require(git(dest, 'status', '--porcelain=v1') == '', 'New worktree is not clean')
+            upstream = git(dest, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}', optional=True)
+            require(upstream == ('origin/' + row['base'] if row['mode'] == 'existing' else None), 'Unexpected upstream')
+            record['upstream'] = upstream
+            record['portability'] = 'relative forward pointer; host backlink retained; container worktree management unsupported'
+            save()
+        for repo, status in statuses.items():
+            require(git(repo, 'status', '--porcelain=v1') == status, 'Original checkout status changed')
+        result['git_status'] = 'complete'; save()
+        if spec:
+            result['tmux'] = create_window(spec, request.parent)
+        result['status'] = 'complete'
+    except Exception as error:
+        result['status'] = 'tmux_failed' if result.get('git_status') == 'complete' else 'failed'; result['error'] = str(error)
+        raise
+    finally:
+        save(); os.close(fd)
+    print(str(result_path))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', choices=['apply', 'window'])
+    parser.add_argument('request', type=Path)
+    parser.add_argument('--workspace-root', type=Path, default=Path.home() / 'exoscale')
+    parser.add_argument('--session', help='Host session for a completed Git-only request (window action only)')
+    parser.add_argument('--window', help='New window name; requires --session')
+    args = parser.parse_args()
+    try:
+        if args.action == 'apply':
+            require(args.session is None and args.window is None, 'Window flags require the window action')
+            apply(args.workspace_root, args.request)
+        else:
+            retry_window(args.workspace_root, args.request, args.session, args.window)
+    except (SetupError, OSError, ValueError, TypeError, KeyError) as error:
+        print('story-setup: ' + str(error), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

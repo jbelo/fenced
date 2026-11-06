@@ -64,7 +64,9 @@ Networking:
 
 Optional extras:
 
-- The agent gateway at `http://agent-gateway:8080` currently returns synthetic mock GitHub/Shortcut data. `go-agent-all` and `go-agent-gateway` include `agentctl` and read-only endpoint configuration via `AGENTCTL_CONFIG`. Read the installed `agent-gateway` skill; the CLI bypasses ambient proxies. Provider credentials and server policy stay outside agents. Mock results are not live-provider evidence.
+- In meta-shell, use `story-implementation-setup` or `story-review-setup` to prepare briefs and host setup requests under `/workspace/stories`. The host performs authenticated Git fetches and worktree creation; wait for a successful result receipt before finishing setup. Template: `$HOME/memty`. Story windows are created by the host helper in `main` (implementation) or `review` (review); the meta shell itself stays in `agent`.
+
+- The agent gateway at `http://agent-gateway:8080` provides live read-only GitHub/Shortcut access for `exoscale/kms` and workspace alias `exoscale`. `go-agent-all` and `go-agent-gateway` include `agentctl` and read-only endpoint configuration via `AGENTCTL_CONFIG`. Read the installed `agent-gateway` skill; the CLI bypasses ambient proxies. Provider credentials and server policy stay outside agents.
 
 - Verified disposable OpenBao TLS is `https://go-agent-openbao-tls:8443`, with CA `$HOME/.openbao-test/ca.crt` and protected test token file `$HOME/.openbao-test/token`. Bypass the proxy for that hostname and preserve TLS verification. TokenReview helpers in agents use a host-assigned unique internal-network alias and bind `0.0.0.0:18443`; no host port is needed. See `openbao-connect` for callback trust and cleanup ownership.
 - OpenBao 2.7.1 provides a local secrets API at `http://go-agent-openbao:8200`; bypass the egress proxy for this hostname. The default extra uses disposable dev mode. The installed `openbao-connect` skill contains its fixed local test token and connection commands; preserve task-supplied credentials for other instances. `go-agent-openbao` and `go-agent-all` include the `bao` CLI.

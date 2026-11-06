@@ -1,0 +1,135 @@
+{
+  "date": "2026-11-04",
+  "gateway_image": "sha256:329fc0d902d09c12f61535fd65d964ff47b6c2fa5ffc3f537e9dbc5055bd87c8",
+  "agent_image": "sha256:cfe6802346494c3c59c817bad3020dd15dc4feb9aaf56476398e7432c43c962d",
+  "cli_sha256": "680c303326d8e9b35ae4ccb511b3b72e0d85955d3f061b5e4d0e1d481fecb0b6",
+  "architecture": "arm64",
+  "mode": "live",
+  "reads": [
+    {
+      "operation": "github pr list",
+      "exit": 0,
+      "error": null,
+      "request_id": "3154aa47be32af6d9663b05d5b0ab9b2",
+      "cursor_length": 410,
+      "continuation_exit": 0,
+      "continuation_error": null
+    },
+    {
+      "operation": "github pr view",
+      "exit": 0,
+      "error": null,
+      "request_id": "3bc07ef50c9967eb0c053e9ffb62f184"
+    },
+    {
+      "operation": "github pr diff",
+      "exit": 0,
+      "error": null,
+      "request_id": "4924608d8195b2a5c69a59700ded7e35"
+    },
+    {
+      "operation": "github pr checks",
+      "exit": 0,
+      "error": null,
+      "request_id": "ebd29e5c2d868ccaaf9360897adac415",
+      "cursor_length": 494,
+      "continuation_exit": 0,
+      "continuation_error": null
+    },
+    {
+      "operation": "shortcut story get",
+      "exit": 0,
+      "error": null,
+      "request_id": "5bad86d0bc52941755b2b6270eedf7d2"
+    },
+    {
+      "operation": "shortcut story search",
+      "exit": 0,
+      "error": null,
+      "request_id": "79751d778f51329050409c04a2ef11b8",
+      "cursor_length": 452,
+      "continuation_exit": 0,
+      "continuation_error": null
+    },
+    {
+      "operation": "github pr view",
+      "exit": 4,
+      "error": "policy_denied",
+      "request_id": "774c761f7a8c448a8aa0e0c6e899176b"
+    }
+  ],
+  "isolation_and_restart": {
+    "runtime_restrictions": true,
+    "external_listener_refused": true,
+    "api.github.com_proxy_denied": true,
+    "api.github.com_direct_denied": true,
+    "api.app.shortcut.com_proxy_denied": true,
+    "api.app.shortcut.com_direct_denied": true,
+    "gateway_connect_rejected": true,
+    "idle_sigterm_exit_zero": true,
+    "restart_healthy": true,
+    "restart_invalidates_cursor": true
+  },
+  "credential_volume_access_check": "passed via maintained runtime-stage and runtime-check",
+  "agent_credential_and_server_config_isolation": true,
+  "limitations": [
+    "No real credential rotation performed; maintained synthetic rotation suite independently passed on the candidate image.",
+    "No active-request SIGTERM coverage; idle graceful shutdown verified.",
+    "No packet-level routing attack test; forwarding disabled in runtime metadata and HTTP CONNECT rejected.",
+    "AMD64 runtime not verified."
+  ],
+  "followup_live_checks": {
+    "checks_same_head_across_two_pages": true,
+    "detached_requester_denied": true,
+    "delegated_read_survives_requester_detach": true,
+    "detached_worker_denied": true,
+    "stopped_worker_cannot_execute": true
+  },
+  "shortcut_continuation_lengths": {
+    "upstream_next_length": 121,
+    "upstream_next_token_length": 42
+  },
+  "synthetic_lifecycle": {
+    "image": "sha256:329fc0d902d09c12f61535fd65d964ff47b6c2fa5ffc3f537e9dbc5055bd87c8",
+    "helper_image": "sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5",
+    "checks": [
+      {
+        "case": "none",
+        "passed": true
+      },
+      {
+        "case": "missing-github",
+        "passed": true
+      },
+      {
+        "case": "missing-shortcut",
+        "passed": true
+      },
+      {
+        "case": "permissions",
+        "passed": true
+      },
+      {
+        "case": "empty",
+        "passed": true
+      },
+      {
+        "case": "whitespace",
+        "passed": true
+      },
+      {
+        "case": "policy",
+        "passed": true
+      }
+    ],
+    "volume_checks": [
+      "maintained stage/check",
+      "selected-provider rotation",
+      "other credential preserved",
+      "unexpected files rejected",
+      "symlinks rejected"
+    ],
+    "limitations": "Synthetic operator-owned sources staged through maintained runtime-stage/check into a Docker volume; no live providers, agent network or external attachment tested."
+  },
+  "source_drain_test": "go test -race ./internal/httpapi -run ^TestDrainReadinessAndAdmission$ -count=1: passed; handler-level coverage only"
+}

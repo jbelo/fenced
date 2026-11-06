@@ -3,7 +3,7 @@
 This folder builds an optional `go-agent-all` image with the currently common agent extras:
 
 - OpenBao 2.7.1 `bao` CLI (service managed separately)
-- Gateway `agentctl` and read-only endpoint config ([ARM64 mock handoff](../agent-gateway/README.md))
+- Gateway `agentctl` and read-only endpoint config ([ARM64 CLI integration](../agent-gateway/README.md))
 - Redpanda `rpk`
 - FoundationDB client tools and libraries
 - OpenSSL development support

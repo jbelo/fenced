@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Use checkout-local dependency caches on both host and agent; never carry credentials.
+set -euo pipefail
+if [[ ${1:-} == --help-cache ]]; then
+    echo 'Usage: public-api-clojure [Clojure CLI arguments]'
+    echo 'Run from a Public API module; PUBLIC_API_SOURCE optionally selects its checkout.'
+    echo 'Uses .deps-cache/{m2,gitlibs}; PUBLIC_API_CLOJURE selects the CLI executable.'
+    exit 0
+fi
+repo_root=${PUBLIC_API_SOURCE:-$(git rev-parse --show-toplevel)}
+repo_root=$(cd "$repo_root" && pwd -P)
+[[ -f "$repo_root/modules/backend/deps.edn" ]] || {
+    echo "Not a Public API checkout: $repo_root" >&2; exit 1;
+}
+case "$(pwd -P)/" in "$repo_root/"*) ;; *) echo 'Run from inside the selected checkout.' >&2; exit 1;; esac
+[[ -f deps.edn ]] || { echo 'Run from a module containing deps.edn.' >&2; exit 1; }
+case "$repo_root" in *$'\n'*|*$'\r'*) echo 'Newlines in checkout paths are unsupported.' >&2; exit 1;; esac
+
+# Git 2.48+ can create worktrees whose links survive a different container mount path.
+git_version=$(git version)
+git_version=${git_version#git version }
+IFS=. read -r git_major git_minor rest <<< "$git_version"
+if ((git_major < 2 || (git_major == 2 && git_minor < 48))); then
+    echo 'Git 2.48+ is required for relocatable Git dependency worktrees.' >&2; exit 1
+fi
+config_count=${GIT_CONFIG_COUNT:-0}
+[[ $config_count =~ ^[0-9]+$ ]] || { echo 'Invalid GIT_CONFIG_COUNT' >&2; exit 1; }
+export "GIT_CONFIG_KEY_${config_count}=worktree.useRelativePaths"
+export "GIT_CONFIG_VALUE_${config_count}=true"
+export GIT_CONFIG_COUNT=$((config_count + 1))
+
+cache_root="$repo_root/.deps-cache"
+mkdir -p "$cache_root/m2" "$cache_root/gitlibs"
+# An ignore file inside the cache avoids modifying the application's tracked files.
+if [[ ! -e "$cache_root/.gitignore" ]]; then
+    printf '*\n' > "$cache_root/.gitignore"
+fi
+export GITLIBS="$cache_root/gitlibs"
+
+# Config carries absolute local paths: keep host/container copies distinct.
+location_key=$(printf '%s' "$repo_root" | cksum | awk '{print $1}')
+export CLJ_CONFIG="$cache_root/config/$(uname -s)-$(uname -m)-$location_key"
+export CLJ_CACHE="$CLJ_CONFIG/.cpcache"
+mkdir -p "$CLJ_CONFIG"
+edn_path=${cache_root//\\/\\\\}
+edn_path=${edn_path//\"/\\\"}
+config_file=$(mktemp "$CLJ_CONFIG/deps.edn.XXXXXX")
+printf '{:mvn/local-repo "%s/m2"}\n' "$edn_path" > "$config_file"
+mv "$config_file" "$CLJ_CONFIG/deps.edn"
+
+# Also include the path in CLI cache keys and recompute classpaths after relocation.
+# User ~/.clojure config is intentionally isolated; ~/.m2/settings.xml still supplies auth.
+exec "${PUBLIC_API_CLOJURE:-clojure}" -Sforce -Sdeps "{:mvn/local-repo \"$edn_path/m2\"}" "$@"

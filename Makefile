@@ -8,7 +8,7 @@ PI_VERSION ?= 1.0.4
 
 REPO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 INSTALL_DIR ?= $(HOME)/.local/bin
-INSTALL_SCRIPTS := run-shell story-shell agent-status agent-vm-status agent-docker-usage agent-container-stats
+INSTALL_SCRIPTS := run-shell story-shell meta-shell agent-status agent-vm-status agent-docker-usage agent-container-stats
 
 AGENT_INTERNAL_NETWORK := go-agent-internal-net
 PROXY_UPSTREAM_NETWORK := go-agent-upstream-net
@@ -129,6 +129,10 @@ install:
 	@set -e; for hook in "$(REPO_DIR)"/extras/*/run-shell.d/*.sh; do \
 		[ -f "$$hook" ] || continue; \
 		install -m 0644 "$$hook" "$(INSTALL_DIR)/run-shell.d/"; \
+	done
+	@set -e; for script in "$(REPO_DIR)"/extras/*/host-bin/*; do \
+		[ -f "$$script" ] || continue; \
+		install -m 0755 "$$script" "$(INSTALL_DIR)/$$(basename "$$script")"; \
 	done
 	@echo "Add $(INSTALL_DIR) to PATH if needed"
 

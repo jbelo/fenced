@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
+  cat <<'EOF'
+Usage:
+  meta-shell [run-shell options]
+
+Launch a workspace-level agent for research and drafting stories.
+Defaults: ~/exoscale mounted at /workspace, starting at its root,
+go-agent-all image, and stories writable. The rest is read-only unless
+WORKSPACE_RW_ENABLE or --workspace-readwrite enables writes.
+
+WORKSPACE_ROOT (or HOST_ROOT) and AGENT_IMAGE override the defaults.
+All options are forwarded to run-shell; --workspace-rw adds writable paths.
+The workspace and stories directory must already exist.
+
+Examples:
+  meta-shell
+  meta-shell --workspace-rw threads
+  meta-shell --workspace-root /path/to/workspace
+  meta-shell --workspace-readwrite
+
+Use run-shell --help for all launcher options.
+EOF
+  exit 0
+fi
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+exec "$script_dir/run-shell" \
+  --workspace-root "${WORKSPACE_ROOT:-${HOST_ROOT:-$HOME/exoscale}}" \
+  --subdir . \
+  --image "${AGENT_IMAGE:-go-agent-all}" \
+  --workspace-rw stories \
+  "$@"

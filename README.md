@@ -132,7 +132,7 @@ This will:
 - build the `go-agent` image
 - initialize writable volume ownership, install Pi and harness context, and seed missing tmux configuration in `agenthome`
 - create `go-agent-internal-net` and `go-agent-upstream-net`, then start `go-agent-egress-proxy`
-- install `story-shell`, `run-shell`, and the resource helpers
+- install `story-shell`, `meta-shell`, `run-shell`, and the resource helpers
 
 Build the repo-owned Squid proxy image when needed:
 
@@ -281,6 +281,21 @@ Use this carefully:
 Depending on the specific agent CLI, the expected auth path may differ, but the same pattern applies: place the working host-generated auth material into the persistent container home instead of relying on interactive login inside the container.
 
 ## Usage
+
+For workspace-level research and story drafting:
+
+```sh
+meta-shell
+```
+
+This opens `~/exoscale` at `/workspace` using `go-agent-all`, with `stories`
+writable and the rest of the workspace read-only by default. It starts at the
+workspace root in the usual `agent` tmux session. Both directories must exist.
+Use `--workspace-root PATH` to select another workspace, `--workspace-rw threads`
+to add a writable directory, or `--workspace-readwrite` for whole-workspace writes.
+`WORKSPACE_ROOT`/`HOST_ROOT`, `AGENT_IMAGE`, and the usual `run-shell` environment
+options also apply. The gateway supports research reads; story creation through
+the gateway is not supported.
 
 From inside a story workspace:
 

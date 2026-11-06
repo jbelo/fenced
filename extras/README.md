@@ -1,5 +1,7 @@
 # Optional extras
 
+- [Story setup](story-setup/README.md): meta-agent setup skills and a host-side JSON-to-worktree handoff.
+
 Each extra keeps its setup commands, configuration, and documentation in its
 own directory. Run its Makefile from the harness repository; consult its README
 for dependencies and available overrides.
@@ -23,7 +25,7 @@ in the extra's README/setup guide. Refresh replaces each listed skill file.
 Refresh installs current entries only; it does not remove older files from
 existing agent homes.
 
-- [Agent gateway](agent-gateway/README.md): ARM64 mock `agentctl`, protected client configuration and gateway usage skill.
+- [Agent gateway](agent-gateway/README.md): ARM64 `agentctl` for live read-only GitHub/Shortcut access, protected client configuration and gateway usage skill.
 - [Cassandra](cassandra/README.md): persistent database service, lifecycle, and readiness checks.
 - [OpenBao](openbao/README.md): disposable OpenBao 2.7.1 HTTP/TLS services, agent trust/credentials, TokenReview callback routing and optional `bao` CLI.
 - [Memty](memty/README.md): read-only template at `$HOME/memty` through the standard shell launchers.
@@ -37,7 +39,7 @@ existing agent homes.
 - [SSH support](ssh/README.md): reusable local-service SSH image layer and client-key setup.
 - [OpenSSL agent extension](agent-openssl/README.md): agent development libraries.
 - [Terraform agent extension](terraform/README.md): Terraform 1.11.4 CLI and the `terraform-exoscale-run` skill for local Exoscale provider testing.
-- [Combined agent image](all/README.md): OpenSSL, FoundationDB, Redpanda, Terraform, OpenBao and mock gateway tooling, plus the Java 25 runtime.
+- [Combined agent image](all/README.md): OpenSSL, FoundationDB, Redpanda, Terraform, OpenBao and gateway tooling, plus the Java 25 runtime.
 
 Database service containers and their data volumes are separate from the agent
 home volume. Follow each extra's lifecycle instructions to manage them.

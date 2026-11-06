@@ -1,0 +1,23 @@
+{
+  "agent_image": "sha256:cfe6802346494c3c59c817bad3020dd15dc4feb9aaf56476398e7432c43c962d",
+  "gateway_image": "sha256:0e986137eb422012efad5325c145360723bc54e371025711b69000a58ba9da50",
+  "cli_sha256": "680c303326d8e9b35ae4ccb511b3b72e0d85955d3f061b5e4d0e1d481fecb0b6",
+  "checks": [
+    "mock gateway identity and inspected runtime restrictions",
+    "github pr list --repo company/project --limit 50",
+    "github pr view --repo company/project --number 123",
+    "github pr diff --repo company/project --number 123",
+    "github pr checks --repo company/project --number 123 --limit 50",
+    "shortcut story get --workspace engineering --id 456",
+    "shortcut story search --workspace engineering --text gateway --limit 50",
+    "github pr view --repo forbidden/project --number 1",
+    "github pr list --repo company/project --cursor invalid",
+    "proxy bypass with deliberately unusable HTTP/HTTPS/ALL proxies",
+    "protected CLI/config; no server configuration, policy, credential mount or Docker socket",
+    "GitHub/Shortcut denied through shared proxy and direct network access",
+    "direct removal denies requester; previously delegated read continues; worker disconnection and stop revoke delegation",
+    "shared proxy policy unchanged",
+    "isolated delivered-image clone: primary-interface read succeeds, secondary interface refuses connection, CONNECT forwarding denied"
+  ],
+  "limitations": "ARM64 mock only. No live providers, AMD64, active-request shutdown, or packet-level routing attack proof. Second-interface test uses an isolated clone and two internal bridges, not a live external attachment."
+}

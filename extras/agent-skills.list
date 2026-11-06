@@ -9,3 +9,5 @@ agent-public-api/skills/public-api-clojure
 terraform/skills/terraform-exoscale-run
 openbao/skills/openbao-connect
 agent-gateway/skills/agent-gateway
+story-setup/skills/story-implementation-setup
+story-setup/skills/story-review-setup

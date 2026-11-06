@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Host-side launcher: expose the template separately from writable workspaces.
+memty_source=${MEMTY_SOURCE:-"$HOME/personal/memty"}
+if [[ ! -d "$memty_source" || ! -r "$memty_source/AGENTS.md" ]]; then
+  printf 'error: Memty source must be a directory containing readable AGENTS.md: %s\n' "$memty_source" >&2
+  exit 1
+fi
+memty_source=$(cd -- "$memty_source" && pwd -P)
+case "$memty_source" in
+  *,*) printf 'error: Memty source paths containing commas are unsupported\n' >&2; exit 1 ;;
+esac
+
+export MEMTY_SOURCE="$memty_source" MEMTY_ENABLE=1
+exec story-shell "$@"

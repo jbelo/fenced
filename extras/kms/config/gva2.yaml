@@ -1,0 +1,22 @@
+server:
+  address: "0.0.0.0:8080"
+metrics:
+  server:
+    address: "0.0.0.0:8081"
+foundationdbconfig:
+  clusterfile: "/etc/kms/fdb.cluster"
+  rootpath:
+    - kms-ch-gva-2
+zone: "ch-gva-2"
+supportedzones: ["ch-gva-2", "de-fra-1"]
+zoneresolution: {"ch-gva-2": "gva2", "de-fra-1": "fra1"}
+zoneresolutionpattern: "http://%s"
+zoneresolutionoverride:
+  "ch-gva-2": "http://go-agent-kms-gva2:8080"
+  "de-fra-1": "http://go-agent-kms-fra1:8080"
+rootkeysfolder: "/etc/kms/secrets"
+defaultrootkey: "5383347d-35c9-4e56-86a2-d504e540c2f1"
+billingenabled: true
+kafkabrokers:
+  - "go-agent-redpanda:9092"
+kafkatopic: "exo.kms.fct.inventory.0"

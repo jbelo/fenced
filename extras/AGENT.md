@@ -10,7 +10,8 @@ These installed files are self-contained; access to the fenced checkout is not n
 
 | Extra | Purpose / default endpoint | Skill |
 | --- | --- | --- |
-| Agent gateway | Synthetic mock GitHub/Shortcut reads; `http://agent-gateway:8080`; `agentctl` in gateway/all images | `agent-gateway` |
+| Story setup | Prepare story briefs and JSON requests under `/workspace/stories`; await host Git and tmux setup receipts | `story-implementation-setup`, `story-review-setup` |
+| Agent gateway | Live GitHub/Shortcut reads (`exoscale/kms`, workspace `exoscale`); `http://agent-gateway:8080`; `agentctl` in gateway/all images | `agent-gateway` |
 | Cassandra | Identities/API keys in `idstore`; `go-agent-cassandra:9042` | `cassandra-connect` |
 | OpenBao | Disposable secrets API: HTTP `go-agent-openbao:8200`; separate verified TLS `go-agent-openbao-tls:8443`, CA/token in `$HOME/.openbao-test/` | `openbao-connect` |
 | FoundationDB | Database storage; use `$HOME/.fdb.cluster`, not just `go-agent-fdb:4500` | `foundationdb-connect` |
