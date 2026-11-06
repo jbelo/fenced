@@ -154,11 +154,18 @@ If setup is pending or failed, report the blocker instead of a ready-to-start pr
 Provide the prompt in a plain text code block, not as a shell command with quoted
 prompt text. Replace the example placeholders with concrete verified values.
 
+The prompt must ask Pi to brief the operator on its own understanding first,
+using read-only investigation, then stop for explicit authorization. Do not turn
+that briefing into permission to proceed automatically with implementation or review.
+
 ```text
-Implement story <number>: <title> in this workspace.
-Read AGENTS.md and brief/STORY.md, then follow their workflow.
+Brief me on your understanding of story <number>: <title> before implementing it.
+Read AGENTS.md and brief/STORY.md, and inspect the relevant code read-only.
 The implementation worktrees are <repository-to-relative-worktree mapping>.
-Confirm the scope, inspect the relevant code, implement the story, and run the
-appropriate checks. Report changes, validation, and any remaining limitations.
-Do not push changes, open a PR, or modify the Shortcut story unless asked.
+Explain the problem, current behavior, intended outcome, scope and non-goals,
+affected components, and your proposed approach and validation. Distinguish what
+you verified from assumptions; identify uncertainties and questions for me.
+Stop after the briefing and wait for my explicit go-ahead. Do not edit files,
+implement changes, or run implementation tests yet. Do not push, open a PR,
+or modify the Shortcut story.
 ```

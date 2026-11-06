@@ -193,12 +193,18 @@ If setup is pending or failed, report the blocker instead of a ready-to-start pr
 Provide the prompt in a plain text code block, not as a shell command with quoted
 prompt text. Replace the example placeholders with concrete verified values.
 
+The prompt must ask Pi to brief the operator on its own understanding first,
+using read-only investigation, then stop for explicit authorization. Do not turn
+that briefing into permission to proceed automatically with implementation or review.
+
 ```text
-Review the implementation of story <number>: <title> in this workspace.
-Read AGENTS.md and brief/STORY.md, then follow their review workflow.
-Review <PR URLs and repository-to-relative-worktree mapping> against the story
-requirements. The prepared heads are <verified commits>; distinguish local review
-branches from PR source branches. Report concrete findings with file and line
-references, and identify checks performed and remaining gaps.
-Do not modify the implementation, post comments, or change the PR/story unless asked.
+Brief me on your understanding of the review for story <number>: <title> first.
+Read AGENTS.md and brief/STORY.md, and inspect the relevant context read-only.
+The PRs/worktrees are <PR URLs and repository-to-relative-worktree mapping>.
+The prepared heads are <verified commits>; distinguish local review branches
+from PR source branches. Explain the story requirements, intended changes,
+review scope, risks, assumptions, open questions, and proposed review approach.
+Stop after the briefing and wait for my explicit go-ahead before conducting the
+full review or running review checks. Do not modify files, post comments,
+or change the PR/story.
 ```

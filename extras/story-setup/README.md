@@ -12,7 +12,9 @@ The agent supplies the exact host command, including the required `apply` action
 and the host request path. It does not search for the host executable inside the
 container. `window` is reserved for completed-Git window retries or migrations.
 After verifying the completed setup, meta supplies a tailored, ready-to-paste Pi
-prompt for the story workspace. Meta does not launch Pi or start the story work.
+prompt for the story workspace. Pi first investigates read-only, briefs the operator
+on its understanding and proposed approach, and waits for explicit go-ahead before
+implementation or full review. Meta does not launch Pi or start the story work.
 
 The agent prepares the template/brief and a JSON request inside an existing
 `~/exoscale/stories/<workspace>/`. Review the request, then run on the host:
