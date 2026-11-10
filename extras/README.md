@@ -25,7 +25,7 @@ in the extra's README/setup guide. Refresh replaces each listed skill file.
 Refresh installs current entries only; it does not remove older files from
 existing agent homes.
 
-- [Agent gateway](agent-gateway/README.md): ARM64 `agentctl` for live read-only GitHub/Shortcut access, protected client configuration and gateway usage skill.
+- [Agent gateway](agent-gateway/README.md): ARM64 `agentctl` for live read-only GitHub/Shortcut access and PR feedback, protected client configuration and gateway usage skill.
 - [Cassandra](cassandra/README.md): persistent database service, lifecycle, and readiness checks.
 - [OpenBao](openbao/README.md): disposable OpenBao 2.7.1 HTTP/TLS services, agent trust/credentials, TokenReview callback routing and optional `bao` CLI.
 - [Memty](memty/README.md): read-only template at `$HOME/memty` through the standard shell launchers.

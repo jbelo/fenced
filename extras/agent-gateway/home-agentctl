@@ -1,0 +1,10 @@
+#!/bin/sh
+# Compatibility entrypoint for already-running images without the gateway CLI.
+set -eu
+if [ -x /usr/local/bin/agentctl ] &&
+   [ "$(sha256sum /usr/local/bin/agentctl | cut -d' ' -f1)" = b41301ae9176288f8d7ee3368de4e264e97a462b19c2f5a503dfb4adb14cdd2b ]; then
+  export AGENTCTL_CONFIG="${AGENTCTL_CONFIG:-/etc/agentctl/config.json}"
+  exec /usr/local/bin/agentctl "$@"
+fi
+export AGENTCTL_CONFIG="${AGENTCTL_CONFIG:-$HOME/.local/lib/agent-gateway/config.json}"
+exec "$HOME/.local/lib/agent-gateway/agentctl" "$@"

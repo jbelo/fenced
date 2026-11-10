@@ -1,0 +1,4 @@
+# Apply after Gateway's deploy/compose.live.yaml for Fenced deployments.
+services:
+  agent-gateway:
+    container_name: ${GATEWAY_CONTAINER_NAME:-go-agent-gateway}

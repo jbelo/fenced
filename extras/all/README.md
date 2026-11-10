@@ -22,7 +22,7 @@ make build
 
 Then build the union image:
 
-The gateway CLI currently requires the local ARM64 mock image documented in the
+The gateway CLI currently requires the local ARM64 gateway delivery image documented in the
 [agent-gateway extra](../agent-gateway/README.md). This limits this build to ARM64
 until a verified multi-architecture handoff is available.
 

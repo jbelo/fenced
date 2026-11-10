@@ -1,0 +1,184 @@
+{
+  "agent_image": "sha256:8494a910d40646e2014f95f5c28569bfa3863e275f2f7f7b466e7bb02bdba2f6",
+  "gateway_image": "sha256:421c381f611379447bfc0ecc77469ffa69a3234fa26c55cdb3c9c14ab8af9a3d",
+  "cli_sha256": "b41301ae9176288f8d7ee3368de4e264e97a462b19c2f5a503dfb4adb14cdd2b",
+  "initial": {
+    "limit": 50,
+    "pages": 1,
+    "head_sha": "55faf74e97bebd8eac680f71ed88036f44772d41",
+    "complete": true,
+    "reviews": 2,
+    "discussion_comments": 1,
+    "threads": 14,
+    "inline_comments": 14,
+    "replies": 0,
+    "cross_page_fragments": 0,
+    "resolved_outdated": "unknown (null)"
+  },
+  "refresh": {
+    "limit": 50,
+    "pages": 1,
+    "head_sha": "55faf74e97bebd8eac680f71ed88036f44772d41",
+    "complete": true,
+    "reviews": 2,
+    "discussion_comments": 1,
+    "threads": 14,
+    "inline_comments": 14,
+    "replies": 0,
+    "cross_page_fragments": 0,
+    "resolved_outdated": "unknown (null)"
+  },
+  "comparison": {
+    "same_head": true,
+    "new_records": 0,
+    "missing_observations": 0,
+    "changed_records": 0
+  },
+  "smaller_pages": {
+    "limit": 4,
+    "pages": 5,
+    "head_sha": "55faf74e97bebd8eac680f71ed88036f44772d41",
+    "complete": true,
+    "reviews": 2,
+    "discussion_comments": 1,
+    "threads": 14,
+    "inline_comments": 14,
+    "replies": 0,
+    "cross_page_fragments": 0,
+    "resolved_outdated": "unknown (null)"
+  },
+  "policy_denied": true,
+  "unusable_ambient_proxy_bypassed": true,
+  "limitations": [
+    "Live feedback can change during pagination; no atomic snapshot.",
+    "No feedback was posted/edited to manufacture refresh changes.",
+    "resolved/outdated are unknown; completeness does not supply those fields.",
+    "Live PR 566 has no inline replies in this observation; reply merging requires separate fixture evidence.",
+    "AMD64 runtime and unrelated lifecycle gaps are not verified.",
+    "PR 566 diff failed twice with upstream_unavailable; PR 539 diff passed. No attribution to this feature established. Reported to Gateway with request ID."
+  ],
+  "date": "2026-11-09",
+  "source_base": "ebff15fdca815a46c43e566c61a3c7db889bb0cf",
+  "source_dirty": true,
+  "source_manifest_sha256": "1124ede0ed55b639730d57e69c19b4e1d5d357e06a3db08e0a50cf512409a9b6",
+  "source_snapshot_sha256": "0511e56f774d806a2db21a27cd3e9c77741b1e28ed98b7599bbb36867f4f1268",
+  "all_image_build": "passed",
+  "image_binaries_match_handoff": true,
+  "runtime_restrictions": true,
+  "external_interface_refused": true,
+  "agent_has_no_server_credentials_or_docker_socket": true,
+  "synthetic_startup": {
+    "image": "sha256:421c381f611379447bfc0ecc77469ffa69a3234fa26c55cdb3c9c14ab8af9a3d",
+    "helper_image": "sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5",
+    "checks": [
+      {
+        "case": "none",
+        "passed": true
+      },
+      {
+        "case": "missing-github",
+        "passed": true
+      },
+      {
+        "case": "missing-shortcut",
+        "passed": true
+      },
+      {
+        "case": "permissions",
+        "passed": true
+      },
+      {
+        "case": "empty",
+        "passed": true
+      },
+      {
+        "case": "whitespace",
+        "passed": true
+      },
+      {
+        "case": "policy",
+        "passed": true
+      }
+    ],
+    "volume_checks": [
+      "maintained stage/check",
+      "selected-provider rotation",
+      "other credential preserved",
+      "unexpected files rejected",
+      "symlinks rejected"
+    ],
+    "limitations": "Synthetic operator-owned sources staged through maintained runtime-stage/check into a Docker volume; no live providers, agent network or external attachment tested."
+  },
+  "synthetic_reply_fragments": {
+    "limit": 1,
+    "pages": 4,
+    "head_sha": "0123456789012345678901234567890123456789",
+    "complete": true,
+    "reviews": 1,
+    "discussion_comments": 1,
+    "threads": 1,
+    "inline_comments": 2,
+    "replies": 1,
+    "cross_page_fragments": 1,
+    "resolved_outdated": "unknown (null)",
+    "gateway_image": "sha256:421c381f611379447bfc0ecc77469ffa69a3234fa26c55cdb3c9c14ab8af9a3d",
+    "kind": "synthetic executable/network fixture, not live provider data"
+  },
+  "existing_story_container": {
+    "limit": 50,
+    "pages": 1,
+    "head_sha": "55faf74e97bebd8eac680f71ed88036f44772d41",
+    "complete": true,
+    "reviews": 2,
+    "discussion_comments": 1,
+    "threads": 14,
+    "inline_comments": 14,
+    "replies": 0,
+    "cross_page_fragments": 0,
+    "resolved_outdated": "unknown (null)"
+  },
+  "compatibility_reads": [
+    {
+      "command": "github pr list --repo exoscale/kms --limit 1",
+      "exit": 0,
+      "error": null,
+      "request_id": "0e5aee167d613b2bba48578750c15a44"
+    },
+    {
+      "command": "github pr view --repo exoscale/kms --number 566",
+      "exit": 0,
+      "error": null,
+      "request_id": "cb84b6ba9e00fd8b2d2b2da61b3c8aa7"
+    },
+    {
+      "command": "github pr diff --repo exoscale/kms --number 566",
+      "exit": 7,
+      "error": "upstream_unavailable",
+      "request_id": "0b40b70993406d8a34bec5ac09ce08d5"
+    },
+    {
+      "command": "github pr diff --repo exoscale/kms --number 539",
+      "exit": 0,
+      "error": null,
+      "request_id": "8432f02da666cc6baebbae12076a912e"
+    },
+    {
+      "command": "github pr checks --repo exoscale/kms --number 566 --limit 1",
+      "exit": 0,
+      "error": null,
+      "request_id": "b070be2f9a0e1a958eae34997cfa9ba3"
+    },
+    {
+      "command": "shortcut story get --workspace exoscale --id 184613",
+      "exit": 0,
+      "error": null,
+      "request_id": "e1bfabb6b6fc0dd0492bb44c46a18aec"
+    },
+    {
+      "command": "shortcut story search --workspace exoscale --text kms --limit 1",
+      "exit": 0,
+      "error": null,
+      "request_id": "62d855609f29e2e06e60d47e67fa2d58"
+    }
+  ]
+}

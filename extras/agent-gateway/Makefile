@@ -10,3 +10,7 @@ agent-gateway-build:
 
 agent-gateway-check:
 	python3 $(ROOT_DIR)/extras/agent-gateway/scripts/verify.py --image $(AGENT_ALL_IMAGE)
+
+.PHONY: agent-gateway-feedback-check
+agent-gateway-feedback-check:
+	python3 $(ROOT_DIR)/extras/agent-gateway/scripts/verify-feedback.py --image $(AGENT_ALL_IMAGE) --output $(ROOT_DIR)/extras/agent-gateway/feedback-verification.json
