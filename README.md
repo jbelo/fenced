@@ -457,27 +457,42 @@ The launcher also prepares a user-local npm install path in the writable home vo
 
 The proxy allowlist includes npm registry access so user-local npm installs can work through Squid.
 
-`make init-volumes` installs Pi directly into `$HOME/.local` as the agent UID,
-using `make install-agent-pi`. The initial version defaults to `PI_VERSION=1.0.4`.
-Pi and tmux initialization logic lives in `scripts/install-agent-pi.sh` and
-`scripts/install-agent-tmux.sh`; the Makefile runs them in temporary containers.
-These are setup scripts, not wrappers around normal Pi or tmux execution.
-Existing home installations are preserved, including across image rebuilds.
-For an already initialized home, run `make install-agent-pi` on the host.
-This preparation container uses Docker's default network for npm downloads;
-it does not require the egress proxy to be running. No Pi wrapper or seed is
-included in the image.
+`make init-volumes` installs managed Pi into `$HOME/.pi/agent/install`, using
+`make install-agent-pi` (default `PI_VERSION=1.5.2`). Versioned releases use Pi's
+published lockfile and `npm ci --ignore-scripts`. `$HOME/.local/bin/pi` selects
+the managed launcher. Existing installations are preserved during initialization.
 
-Update the writable installation without rebuilding the image:
+To migrate an existing npm installation, run on the host:
 
 ```sh
-pi update
+make migrate-agent-pi
 ```
 
-Updates inside agent containers require npm registry access through the proxy.
-The launcher puts `$HOME/.local/bin` first in PATH. Pi persists in the agent home;
-reinitialize after replacing that volume. Recreate containers from rebuilt images
-to remove the old image's bootstrap helper.
+This temporary preparation container uses Docker's default network. Migration
+validates and smoke-tests the new release before atomically switching the command.
+It retains the legacy npm package tree and older managed releases: running agents
+are not restarted and their module paths remain available. Settings, sessions,
+authentication and extensions are left alone. Do not run concurrent Pi updates
+while migrating. Failed downloads leave the existing command selected; unexpected
+layouts stop for inspection. A stale `.pi/agent/.fenced-install-lock` after an
+interruption must be inspected before retrying.
+
+For migrated npm installs, the old link target is recorded in
+`$HOME/.pi/agent/fenced-legacy-pi-target`. To roll back command selection, atomically
+replace `$HOME/.local/bin/pi` with a symlink to that recorded target; do not delete
+either installation while processes may still use it. This does not roll back
+settings changed later by Pi. Never use npm update/uninstall for the retained Pi
+package: npm can replace or remove the managed command link.
+
+After migration, update with `pi update`. Updates require `pi.dev` and npm registry
+access through the proxy. The home is shared: new invocations in every container
+using it select the new version; existing Pi processes stay on their loaded version.
+Migration does not rebuild images or restart containers.
+
+New shells use the image's `libnss_wrapper` to resolve an otherwise unknown numeric
+UID as `agent-<uid>`, avoiding the “I have no name!” prompt. Identity files are
+container-local under `/tmp`; host UID/GID permissions remain unchanged. Existing
+containers and tmux servers retain their startup environment.
 
 ## Egress proxy operations
 

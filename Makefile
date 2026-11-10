@@ -4,7 +4,7 @@ AGENT_HOME := /home/agent
 
 AGENTHOME := agenthome
 GOMODCACHE := gomodcache
-PI_VERSION ?= 1.0.4
+PI_VERSION ?= 1.5.2
 
 REPO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 INSTALL_DIR ?= $(HOME)/.local/bin
@@ -26,7 +26,7 @@ AGENT_TMUX_DEST := $(AGENT_HOME)/.tmux.conf
 UID := $(shell id -u)
 GID := $(shell id -g)
 
-.PHONY: help volumes init-volumes install-agent-pi install-agent-context install-agent-tmux build install networks egress-proxy-build egress-proxy-up egress-proxy-down egress-proxy-logs egress-init egress-verify clean
+.PHONY: migrate-agent-pi help volumes init-volumes install-agent-pi install-agent-context install-agent-tmux build install networks egress-proxy-build egress-proxy-up egress-proxy-down egress-proxy-logs egress-init egress-verify clean
 
 help:
 	@echo "make build                       Build the agent container image"
@@ -34,6 +34,7 @@ help:
 	@echo "make init-volumes                Initialize writable volume ownership"
 	@echo "make install-agent-context       Refresh harness context and reference docs in agent home"
 	@echo "make install-agent-tmux          Install agent tmux config if missing"
+	@echo "make migrate-agent-pi            Migrate Pi, retaining legacy files for running processes"
 	@echo "make install-agent-pi            Install Pi in the writable agent home if missing"
 	@echo "make install [INSTALL_DIR=path]  Install launchers and resource helpers"
 	@echo "make networks                    Create the internal agent network and proxy upstream network"
@@ -64,13 +65,16 @@ init-volumes: volumes
 	$(MAKE) install-agent-pi
 
 # Host-managed preparation uses Docker's default network for npm downloads.
+migrate-agent-pi: PI_ACTION=migrate
+migrate-agent-pi: install-agent-pi
+
 install-agent-pi:
 	@docker volume inspect "$(AGENTHOME)" >/dev/null || { echo "Run make init-volumes first." >&2; exit 1; }
 	docker run --rm --read-only --tmpfs /tmp:rw,mode=1777 \
 		--user $(UID):$(GID) --env HOME="$(AGENT_HOME)" \
 		--mount "type=volume,src=$(AGENTHOME),target=$(AGENT_HOME)" \
-		--mount "type=bind,src=$(REPO_DIR)/scripts/install-agent-pi.sh,target=/tmp/install-agent-pi.sh,readonly" \
-		$(AGENT_IMAGE) sh /tmp/install-agent-pi.sh "$(PI_VERSION)"
+		--mount "type=bind,src=$(REPO_DIR)/scripts,target=/opt/fenced-setup,readonly" \
+		$(AGENT_IMAGE) sh /opt/fenced-setup/install-agent-pi.sh "$(PI_VERSION)" "$(PI_ACTION)"
 
 install-agent-context: volumes
 	docker run --rm \

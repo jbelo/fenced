@@ -99,3 +99,15 @@ Persistence and safety:
 - Treat `$HOME`, `/go/pkg/mod`, service databases, and Docker volumes as persistent developer state.
 - Do not delete, reset, or reinitialize persistent harness state unless explicitly asked.
 - Treat `/workspace` as the only intended mounted project/workspace surface.
+
+## Pi installation and shell identity
+
+Pi is persistent shared-home state. The host uses `make migrate-agent-pi` to move
+legacy npm installations to managed releases without restarting agents. The command
+remains `$HOME/.local/bin/pi`; use `pi update` afterward, never npm update/uninstall
+for Pi. Migration retains legacy modules and older releases for running processes.
+Do not delete those files or run updates concurrently with host migration.
+New shell launches resolve unknown numeric UIDs as `agent-<uid>` through
+`libnss_wrapper`; this does not change file ownership or permissions. Existing tmux
+servers keep their environment until restarted; a missing username is cosmetic
+for the prompt and does not require interrupting a running task.

@@ -288,6 +288,21 @@ if [ "$start_tmux" = 1 ]; then
   shell_command='export PATH="$HOME/.local/bin:$PATH"; if [ -t 0 ] && [ -t 1 ] && command -v tmux >/dev/null 2>&1; then tmux new-session -A -s agent -c "$PWD"; fi; exec /bin/bash'
 fi
 
+# Resolve host numeric UIDs for Bash/tmux as well as SSH, without changing /etc.
+# The files live for the container lifetime; running containers are unaffected.
+identity_command='if ! getent passwd "$(id -u)" >/dev/null && [ -r /usr/local/lib/libnss_wrapper.so ]; then
+  identity_dir=$(mktemp -d /tmp/agent-identity.XXXXXX) || exit 1
+  cp /etc/passwd "$identity_dir/passwd" || exit 1
+  cp /etc/group "$identity_dir/group" || exit 1
+  printf "agent-%s:x:%s:%s:Agent:%s:/bin/bash\n" "$(id -u)" "$(id -u)" "$(id -g)" "$HOME" >> "$identity_dir/passwd"
+  if ! getent group "$(id -g)" >/dev/null; then
+    printf "agent-%s:x:%s:\n" "$(id -g)" "$(id -g)" >> "$identity_dir/group"
+  fi
+  export NSS_WRAPPER_PASSWD="$identity_dir/passwd" NSS_WRAPPER_GROUP="$identity_dir/group"
+  export LD_PRELOAD="/usr/local/lib/libnss_wrapper.so${LD_PRELOAD:+:$LD_PRELOAD}"
+fi; '
+shell_command="$identity_command$shell_command"
+
 exec docker run "${docker_args[@]}" "${extra_docker_args[@]}" \
   -e "NPM_CONFIG_PREFIX=$agent_home/.local" \
   "$agent_image" \
