@@ -109,6 +109,15 @@ That keeps the worktree metadata valid both:
 - on the host
 - inside the container under `/workspace`
 
+## Portable host setup
+
+[Portable host setup](host/SPEC.md) describes the planned setup for macOS/ARM64,
+a local Ubuntu 24.04/ARM64 VM and remote Ubuntu 24.04/AMD64 VMs. Profile-based
+setup is not implemented yet; existing commands below remain unchanged.
+
+[Use the Nix host shell](host/NIX.md) explains how to prepare, enter and verify
+the host-tool environment. Initial locking and native validation remain pending.
+
 ## Requirements
 
 - Docker or Colima (or another Docker-compatible runtime)
