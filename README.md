@@ -116,7 +116,8 @@ a local Ubuntu 24.04/ARM64 VM and remote Ubuntu 24.04/AMD64 VMs. Profile-based
 setup is not implemented yet; existing commands below remain unchanged.
 
 [Use the Nix host shell](host/NIX.md) explains how to prepare, enter and verify
-the host-tool environment. Initial locking and native validation remain pending.
+the host-tool environment. The locked shell has passed native Linux/ARM64
+host-tool checks; native macOS and Linux/AMD64 validation remain pending.
 
 ## Requirements
 
