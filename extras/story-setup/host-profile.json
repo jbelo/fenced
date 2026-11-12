@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "id": "story-setup",
+  "kind": "host-handoff",
+  "tools": ["python3", "git", "tmux", "story-setup"],
+  "skills": ["story-implementation-setup", "story-review-setup"]
+}

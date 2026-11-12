@@ -58,6 +58,17 @@ class ProfileTests(unittest.TestCase):
                     self.load(variant)
             run.assert_not_called()
 
+    def test_selected_host_handoff_checks_tools_and_skills(self):
+        self.profile['extras'] = ['story-setup']
+        p = self.load()
+        bundle = {'.agents/skills/' + name + '/SKILL.md': '' for name in
+                  ('story-implementation-setup', 'story-review-setup')}
+        with patch.object(h.shutil, 'which', return_value='/tools/tool'):
+            self.assertEqual(h.check_extras(p, bundle)[0]['status'], 'ready')
+            with self.assertRaises(h.Error): h.check_extras(p, {})
+        with patch.object(h.shutil, 'which', return_value=None), self.assertRaises(h.Error):
+            h.check_extras(p, bundle)
+
     def test_duplicate_fields(self):
         self.filename.write_text('{"version":1,"version":1}')
         with self.assertRaises(h.Error):

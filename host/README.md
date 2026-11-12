@@ -2,8 +2,8 @@
 
 Use these commands on the machine that runs Docker: your Mac, or inside an
 Ubuntu 24.04 ARM64/AMD64 VM. They prepare/check host prerequisites only. They do
-not initialize the agent harness; profile loading and extra-specific checks are
-still planned in [the setup specification](SPEC.md).
+not initialize the agent harness themselves. Profile initialization is described
+below; the broader requirements are in [the setup specification](SPEC.md).
 
 ## Check readiness
 
@@ -80,7 +80,9 @@ inside the disposable VM, never against the existing Mac harness.
 Supply `--profile /path/to/profile.json` using the fields in [SPEC.md](SPEC.md).
 For plan, init and launch, also supply `--source /path/to/fenced` and
 `--state-dir /path/to/private-state`; the state directory's parent must exist.
-Use unique resource names and `extras: []`; selected-extra lifecycle is pending.
+Use unique resource names and `extras: []` for the base harness, or
+`"extras": ["story-setup"]` to check the host Git/tmux handoff prerequisites.
+Other extras are rejected until their profile adapters are implemented.
 Agent and proxy images must already exist locally and match the host architecture.
 The agent image must provide Node, sh, stat and chown for isolated setup helpers.
 
@@ -96,5 +98,58 @@ configuration and unlisted home files remain intact. Initialization does not
 install Pi or enroll credentials. Launch selects the profile's image and mounts
 through meta-shell, with a controlled environment and no optional template mount.
 
-This command is under validation. Native AMD64, selected extras and the complete
-Git/tmux handoff remain pending; use isolated resources while testing.
+This command is under validation. The base/story-setup path has local ARM64 evidence. Native AMD64, external Git
+authentication and other selected extras remain pending; use isolated resources
+while testing.
+
+Selecting story-setup checks host tools and required agent skills before Docker
+mutation. Initialization never applies setup requests or creates host tmux sessions.
+Review the agent request, then run `story-setup apply REQUEST --workspace-root ROOT`
+on the host; create the requested host tmux session first. See the
+[story-setup guide](../extras/story-setup/README.md). Changing an existing profile's
+extras changes its receipt binding: use a new isolated profile/state/resource set
+until an explicit migration workflow is available.
+
+## Build base images on a fresh host
+
+From the Fenced checkout, use a local Docker context and unused output tags:
+
+```sh
+python3 host/build-images.py --context default \
+  --agent-tag fenced-agent:local --proxy-tag fenced-proxy:local \
+  --output "$HOME/fenced-build-evidence"
+```
+
+The default shows the plan. Add `--apply` to pull public base images and build
+natively with cache disabled. The output directory must be new; existing output
+tags are refused. Put the resulting tags in `image.reference` and `proxy.image`
+in a new profile. Existing initialized profiles require explicit migration.
+
+Only the two Dockerfiles, SSH wrapper, snapshot setup script, and npm manifest/lock
+enter the build context.
+The helper records their hashes, the context archive, resolved registry base
+digests, output image IDs, package inventories and agent tool versions. Failed
+runs retain an incomplete receipt and build log for diagnosis. No push, credential
+enrollment, container replacement or cache cleanup is performed.
+
+For a later run, `--go-image` and `--debian-image` can take the digest references
+recorded in the receipt. Without an input file, this fixes only the base images; dependency acquisition
+otherwise follows the legacy defaults. Use the recorded input file below to
+freeze the remaining acquisition inputs. OCI image digests need not be identical
+between builds. It builds the base agent and proxy;
+gateway/all-image acquisition remains separate extra-owned work.
+
+For the recorded ARM64 input set, add `--inputs host/image-inputs.json`. This
+selects immutable base digests and explicit Node/Codex/Claude versions, and records
+the input data in the receipt. Git and tmux archives are checked against SHA-256
+before extraction. Their checksums were captured from the versioned upstream
+HTTPS archives; no upstream release-signature verification is claimed. Overriding
+a source version requires supplying its corresponding checksum.
+
+The current input file intentionally has only an ARM64 entry; AMD64 requires its
+own verified base references. It fails instead of selecting ARM64 images. This path uses dated Debian snapshots with package signature verification, an
+official Node archive with SHA-256 verification, and npm ci with integrity-locked
+packages and lifecycle scripts disabled. Claude is linked directly to its
+integrity-verified native package; a missing or unusable binary fails the build. It does not execute the NodeSource setup
+script. Historical Debian metadata expiry is disabled for the snapshot; signature
+verification remains enabled. Upgrading inputs is an explicit reviewed change.

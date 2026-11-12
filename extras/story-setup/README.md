@@ -118,3 +118,14 @@ worktrees. Both flags are required together; they cannot override settings in a
 request or prior migration. On a window failure, the settings remain in the receipt;
 retry `story-setup window` with the same request and no flags. A successful recorded
 window cannot be duplicated. Existing occupied windows are not adopted automatically.
+
+## Portable host profiles
+
+Select `"extras": ["story-setup"]` in a Fenced host profile. The extra-owned
+`host-profile.json` declares host tools and agent skills; profile planning and
+initialization check these before mutating Docker resources. No service, Git fetch
+or tmux window is started by initialization. The reviewed `story-setup apply`
+command remains an explicit host action, and the requested tmux session must exist.
+Credentials and optional private templates require separate operator enrollment.
+The local ARM64 VM handoff is tested with a local Git fixture; native AMD64 and
+external authenticated fetch remain separate validation requirements.

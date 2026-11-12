@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "platforms": {
+    "arm64": {
+      "go": "golang@sha256:dc0963f32053e4bc451d24d87e3892d42d01021b61f093e98eb95c0352bb84b0",
+      "debian": "debian@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc"
+    }
+  },
+  "build_args": {
+    "GIT_VERSION": "2.48.1",
+    "GIT_SHA256": "1c5d545f5dc1eb51e95d2c50d98fdf88b1a36ba1fa30e9ae5d5385c6024f82ad",
+    "TMUX_VERSION": "3.7c",
+    "TMUX_SHA256": "7c60cae9a0e25288e2e24750aafc9e8800fc7fd4555e447e1b29ee4201cfb3bf",
+    "NODE_VERSION": "24.22.3-1nodesource1",
+    "CODEX_VERSION": "0.167.2",
+    "CLAUDE_VERSION": "2.1.322",
+    "DEBIAN_SNAPSHOT": "20261112T000000Z",
+    "NODE_DIST_VERSION": "24.22.3",
+    "NODE_SHA256": "6e51a2ada00f0011cc266f65d98922b403d7ad88f809ca2aa615a5fe1ce6e86c",
+    "LOCKED_NPM": "1"
+  }
+}

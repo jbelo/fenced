@@ -1,0 +1,23 @@
+ARG GO_IMAGE
+FROM ${GO_IMAGE} AS build
+ARG TARGETARCH
+ENV GOPROXY=off GOTOOLCHAIN=local GOENV=off GOFLAGS="" GOEXPERIMENT=""
+WORKDIR /src
+COPY source-snapshot.tar.gz SHA256SUMS ./
+RUN echo '0511e56f774d806a2db21a27cd3e9c77741b1e28ed98b7599bbb36867f4f1268  source-snapshot.tar.gz' | sha256sum -c - && tar -xzf source-snapshot.tar.gz
+WORKDIR /src/agent-gateway
+RUN test "$(go env GOVERSION)" = go1.27.3 && test "$(go env GOARCH)" = "$TARGETARCH" && go test ./...
+RUN mkdir /out && for command in agent-gateway agentctl gateway-healthcheck; do \
+      CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH GOAMD64=v1 GOARM64=v8.0 \
+      go build -trimpath -buildvcs=false -o "/out/$command-linux-$TARGETARCH" "./cmd/$command"; \
+    done && cd /out && grep "linux-$TARGETARCH$" /src/SHA256SUMS | sha256sum -c - && \
+    for command in agent-gateway agentctl gateway-healthcheck; do mv "$command-linux-$TARGETARCH" "$command"; done
+FROM scratch
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=build /out/ /usr/local/bin/
+USER 10001:10001
+EXPOSE 8080
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 CMD ["/usr/local/bin/gateway-healthcheck"]
+ENTRYPOINT ["/usr/local/bin/agent-gateway"]
+CMD ["--config", "/etc/agent-gateway/config.json"]

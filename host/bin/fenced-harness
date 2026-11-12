@@ -72,6 +72,38 @@ def path(value):
     return result
 
 
+def capabilities():
+    base = Path(__file__).resolve().parent.parent
+    installed = base / 'lib/host-extras'
+    paths = installed.glob('*.json') if installed.is_dir() else (base.parent / 'extras').glob('*/host-profile.json')
+    result = {}
+    for filename in paths:
+        item = read_json(filename)
+        fields(item, 'version id kind tools skills', 'extra capability')
+        name(item['id'], 'extra capability id')
+        require(item['version'] == 1 and item['kind'] == 'host-handoff', 'unsupported extra adapter')
+        require(item['id'] not in result, 'duplicate extra capability')
+        for key in ('tools', 'skills'):
+            require(type(item[key]) is list, 'invalid extra prerequisites')
+            for value in item[key]: name(value, 'extra prerequisite')
+        result[item['id']] = item
+    return result
+
+
+def check_extras(p, bundle):
+    reports = []
+    catalog = capabilities()
+    for extra in p['extras']:
+        adapter = catalog[extra]
+        for tool in adapter['tools']:
+            require(shutil.which(tool), extra + ': missing host tool ' + tool + '; enter the Nix host shell')
+        for skill in adapter['skills']:
+            require('.agents/skills/' + skill + '/SKILL.md' in bundle, extra + ': missing agent skill ' + skill)
+        reports.append({'id': extra, 'kind': adapter['kind'], 'status': 'ready',
+                        'note': 'Host applies reviewed requests explicitly; init creates no worktrees or tmux sessions.'})
+    return reports
+
+
 def load_profile(filename):
     filename = Path(filename).resolve(strict=True)
     p = read_json(filename)
@@ -106,7 +138,7 @@ def load_profile(filename):
     for extra in p['extras']:
         name(extra, 'extra')
     require(len(set(p['extras'])) == len(p['extras']), 'duplicate extras')
-    require(not p['extras'], 'selected-extra lifecycle is not implemented; use extras: [] for the base harness')
+    require(set(p['extras']) <= set(capabilities()), 'unsupported selected extra; no profile adapter installed')
     return p
 
 
@@ -276,8 +308,9 @@ def inspect_resources(p, docker, receipt, config, runtime):
 
 def execute(p, checkout, state, apply=False):
     docker = Docker(p['runtime']['context'])
-    runtime = readiness(p, docker)
     bundle, squid = assets(checkout)
+    extra_checks = check_extras(p, bundle)
+    runtime = readiness(p, docker)
     helper = Path(__file__).resolve().parent.parent / 'lib/fenced-seed.js'
     require(helper.is_file(), 'managed-file helper missing')
     binding = {'profile': p, 'uid': os.getuid(), 'gid': os.getgid(), **runtime}
@@ -300,7 +333,7 @@ def execute(p, checkout, state, apply=False):
     resources = inspect_resources(p, docker, receipt, config, runtime)
     plan = {'profile': p, 'images': runtime['images'], 'resources': [
         {'kind': k, 'name': n, 'action': 'reuse' if obj else 'create'} for k, n, r, obj in resources],
-        'managed_files': len(bundle), 'state': str(state),
+        'managed_files': len(bundle), 'state': str(state), 'extras': extra_checks,
         'note': 'Apply checks volume ownership and managed-file conflicts using isolated helper containers. No image pulls.'}
     if not apply:
         return plan

@@ -5,6 +5,9 @@ images. The already deployed gateway is managed by its operator, not this extra.
 The ARM64 deployment uses **live GitHub and Shortcut providers** as of 2026-11-04.
 No provider credentials are installed or agent egress rules changed.
 
+For fresh hosts, use the [portable source and image build](portable/README.md).
+It avoids the legacy Mac-cache dependency and preserves the delivered API.
+
 ## Build and use
 
 The local ARM64 gateway image below must already exist in Docker. This is not a

@@ -1,0 +1,11 @@
+ARG GATEWAY_IMAGE
+ARG BASE_IMAGE
+FROM ${GATEWAY_IMAGE} AS gateway
+FROM ${BASE_IMAGE}
+ARG TARGETARCH
+COPY --from=gateway /usr/local/bin/agentctl /usr/local/bin/agentctl
+COPY SHA256SUMS /tmp/gateway-checksums
+RUN cd /usr/local/bin && grep "agentctl-linux-$TARGETARCH$" /tmp/gateway-checksums | sed "s/agentctl-linux-$TARGETARCH/agentctl/" | sha256sum -c -
+COPY agentctl.json /etc/agentctl/config.json
+RUN chmod 0755 /usr/local/bin/agentctl && chmod 0644 /etc/agentctl/config.json
+ENV AGENTCTL_CONFIG=/etc/agentctl/config.json

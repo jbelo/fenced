@@ -49,7 +49,8 @@
               nativeBuildInputs = [ pkgs.makeWrapper ];
               buildInputs = [ pkgs.bash pkgs.python3 ];
               installPhase = ''
-                mkdir -p "$out/bin/run-shell.d" "$out/lib"
+                mkdir -p "$out/bin/run-shell.d" "$out/lib/host-extras"
+                ${lib.concatMapStrings (dir: if builtins.pathExists (dir + "/host-profile.json") then "install -m 0644 ${dir}/host-profile.json $out/lib/host-extras/${builtins.baseNameOf dir}.json\n" else "") extraDirs}
                 install -m 0644 ${./host/lib/fenced-seed.js} "$out/lib/fenced-seed.js"
                 ${lib.concatMapStrings (installFile "0755" "bin") commands}
                 ${lib.concatMapStrings (installFile "0644" "bin/run-shell.d") hooks}

@@ -6,7 +6,8 @@ work. Nix selects host tools; Docker isolates agents.
 
 This specification guides the portable setup implementation. Baseline readiness
 checks and Ubuntu bootstrap are described in [host preparation](README.md).
-Profile loading, extra-specific checks and harness initialization remain planned.
+Profile loading and base initialization are implemented; story-setup is the first
+selected host capability. Other extra lifecycle adapters remain planned.
 For the development shell, see [Nix host tools](NIX.md).
 
 ## Where Fenced runs

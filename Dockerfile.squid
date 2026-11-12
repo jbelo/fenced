@@ -1,4 +1,8 @@
-FROM debian:12-slim
+ARG DEBIAN_IMAGE=debian:12-slim
+FROM ${DEBIAN_IMAGE}
+ARG DEBIAN_SNAPSHOT
+COPY host/images/apt-snapshot.sh /tmp/fenced-apt-snapshot.sh
+RUN sh /tmp/fenced-apt-snapshot.sh "$DEBIAN_SNAPSHOT"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends squid ca-certificates \
