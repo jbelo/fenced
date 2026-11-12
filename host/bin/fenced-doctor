@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""Read-only baseline host readiness checks; never starts or repairs resources."""
+import argparse
+import json
+import math
+import os
+from pathlib import Path
+import platform
+import re
+import shutil
+import subprocess
+import sys
+
+
+class CheckError(Exception):
+    pass
+
+
+def run(args):
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CheckError('command unavailable or timed out') from exc
+    if result.returncode:
+        # Docker errors can include remote URLs or config details. Do not echo them.
+        raise CheckError('command failed; check installation, context and access')
+    return result.stdout.strip()
+
+
+def architecture(value):
+    return {'arm64': 'arm64', 'aarch64': 'arm64', 'amd64': 'amd64',
+            'x86_64': 'amd64'}.get(value)
+
+
+def host_platform():
+    arch = architecture(platform.machine())
+    if platform.system() == 'Darwin' and arch == 'arm64':
+        return 'macos-arm64', arch
+    if platform.system() == 'Linux' and arch in ('arm64', 'amd64'):
+        try:
+            release = platform.freedesktop_os_release()
+        except OSError as exc:
+            raise CheckError('cannot read Linux release') from exc
+        if release.get('ID') == 'ubuntu' and release.get('VERSION_ID') == '24.04':
+            return 'ubuntu-24.04-' + arch, arch
+    raise CheckError('supported hosts: macOS ARM64 or Ubuntu 24.04 ARM64/AMD64')
+
+
+def directory(path):
+    try:
+        resolved = Path(path).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise CheckError('directory is missing or cannot be resolved') from exc
+    if not resolved.is_dir() or not os.access(resolved, os.R_OK | os.X_OK):
+        raise CheckError('directory is not readable/searchable')
+    return resolved
+
+
+def check_workspace(root, writable, minimum):
+    root = directory(root)
+    for value in writable:
+        child = directory(root / value)
+        if child == root or root not in child.parents:
+            raise CheckError('writable paths must be strict subdirectories of the workspace')
+        if not os.access(child, os.W_OK | os.X_OK):
+            raise CheckError('a selected writable directory is not writable by this user')
+    return 'paths accessible; ' + check_storage(root, minimum)
+
+
+def check_storage(root, minimum):
+    if not root or not Path(root).is_absolute():
+        raise CheckError('storage path is missing or invalid')
+    free = shutil.disk_usage(root).free / (1024 ** 3)
+    if free < minimum:
+        raise CheckError(f'filesystem has {free:.1f} GiB free; requires {minimum:g}')
+    return f'filesystem has {free:.1f} GiB free'
+
+
+def docker_json(context, *args):
+    try:
+        return json.loads(run(['docker', '--context', context, *args]))
+    except (ValueError, TypeError) as exc:
+        raise CheckError('Docker returned invalid metadata') from exc
+
+
+def check_context(context):
+    if any(os.environ.get(key) for key in
+           ('DOCKER_HOST', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH', 'DOCKER_API_VERSION')):
+        raise CheckError('unset Docker host/TLS/API overrides; use the explicit context')
+    if os.environ.get('DOCKER_CONTEXT', context) != context:
+        raise CheckError('DOCKER_CONTEXT conflicts with the explicit context')
+    endpoint = docker_json(context, 'context', 'inspect', context,
+                           '--format', '{{json .Endpoints.docker.Host}}')
+    if not isinstance(endpoint, str) or not endpoint.startswith('unix:///'):
+        raise CheckError('remote or unsupported Docker endpoint; run Fenced on the daemon host')
+    return 'local Unix-socket context; no remote daemon contacted'
+
+
+def check_daemon(context, arch):
+    info = docker_json(context, 'info', '--format',
+        '{"arch":{{json .Architecture}},"os":{{json .OSType}},'
+        '"security":{{json .SecurityOptions}},"root":{{json .DockerRootDir}}}')
+    if not isinstance(info, dict):
+        raise CheckError('Docker returned invalid daemon metadata')
+    if info.get('os') != 'linux' or architecture(info.get('arch')) != arch:
+        raise CheckError('daemon must run Linux on the same architecture as the host')
+    if any('rootless' in str(option) for option in info.get('security', []) or []):
+        raise CheckError('rootless Docker is outside the current supported targets')
+    # Real client/server API compatibility is exercised by the info request.
+    return info
+
+
+def check_image(context, reference, arch):
+    info = docker_json(context, 'image', 'inspect', reference, '--format',
+                       '{"arch":{{json .Architecture}},"os":{{json .Os}},"id":{{json .Id}}}')
+    if not isinstance(info, dict) or info.get('os') != 'linux' or architecture(info.get('arch')) != arch:
+        raise CheckError('image must be Linux and match the daemon architecture')
+    image_id = info.get('id', '')
+    if not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id):
+        raise CheckError('image metadata has no valid immutable image ID')
+    return image_id
+
+
+def parser():
+    result = argparse.ArgumentParser(description=__doc__)
+    result.add_argument('--context', required=True, help='explicit local Docker context')
+    result.add_argument('--workspace', required=True, help='existing workspace root')
+    result.add_argument('--writable', action='append', default=[], help='existing writable subdirectory; repeatable')
+    result.add_argument('--image', action='append', default=[], help='locally available agent/proxy image to inspect; never pulled')
+    result.add_argument('--min-free-gib', type=float, default=5, help='minimum workspace/accessible daemon filesystem free space (default: 5)')
+    result.add_argument('--json', action='store_true', help='structured results; no raw Docker configuration')
+    return result
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
+    if not math.isfinite(args.min_free_gib) or args.min_free_gib < 0:
+        parser().error('--min-free-gib must be finite and nonnegative')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', args.context):
+        parser().error('invalid context name')
+    checks = []
+
+    def check(name, fn):
+        try:
+            detail = fn()
+        except (CheckError, OSError) as exc:
+            detail = str(exc) if isinstance(exc, CheckError) else 'filesystem access failed'
+            checks.append({'check': name, 'status': 'fail', 'detail': detail})
+            return None
+        checks.append({'check': name, 'status': 'pass', 'detail': detail})
+        return detail
+
+    host = check('platform', lambda: host_platform()[0])
+    check('workspace', lambda: check_workspace(args.workspace, args.writable, args.min_free_gib))
+    for tool in ('bash', 'git', 'tmux', 'nvim', 'python3', 'rsync', 'make', 'docker', 'ssh', 'nix'):
+        def available(tool=tool):
+            if not shutil.which(tool):
+                raise CheckError('missing tool; install Nix and enter the Fenced host shell')
+            return 'available'
+        check('tool:' + tool, available)
+    arch = host.rsplit('-', 1)[-1] if host else None
+    # Context/environment checks precede every request to a Docker daemon.
+    context = check('context', lambda: check_context(args.context)) if host else None
+    if context and arch:
+        try:
+            info = check_daemon(args.context, arch)
+            checks.append({'check': 'daemon', 'status': 'pass', 'detail': 'Linux architecture and client/server API compatible'})
+        except CheckError as exc:
+            checks.append({'check': 'daemon', 'status': 'fail', 'detail': str(exc)})
+        else:
+            if platform.system() == 'Linux':
+                check('daemon-storage', lambda: check_storage(info.get('root'), args.min_free_gib))
+            else:
+                checks.append({'check': 'daemon-storage', 'status': 'note',
+                    'detail': 'Mac filesystem space does not measure Colima disk space; inspect agent-status vm separately'})
+            for index, reference in enumerate(args.image):
+                check(f'image:{index + 1}', lambda reference=reference: check_image(args.context, reference, arch))
+    checks.append({'check': 'scope', 'status': 'note', 'detail':
+        'baseline only: no container mount/egress probe, profile loading or extra-specific readiness check'})
+    ok = all(item['status'] != 'fail' for item in checks)
+    if args.json:
+        print(json.dumps({'ok': ok, 'checks': checks}, indent=2))
+    else:
+        for item in checks:
+            print(f"{item['status'].upper()} {item['check']}: {item['detail']}")
+    return 0 if ok else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

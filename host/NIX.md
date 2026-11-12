@@ -3,7 +3,9 @@
 Use this shell to develop and run Fenced with a consistent set of host tools.
 It provides Bash, Git, tmux, Neovim (`nvim`), Python, rsync, Make, the Docker client,
 OpenSSH and shell utilities, together with Fenced launchers and extra-owned host
-commands. It does not install or start the Docker harness.
+commands, including the read-only `fenced-doctor`. See [host preparation](README.md)
+for readiness checks and Ubuntu bootstrap. Entering the shell does not install or
+start the Docker harness.
 
 The targets are macOS/ARM64, Ubuntu 24.04/ARM64 and Ubuntu 24.04/AMD64. Run the
 commands below from the Fenced Git checkout on the machine you are using. Nix

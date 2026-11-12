@@ -112,12 +112,14 @@ That keeps the worktree metadata valid both:
 ## Portable host setup
 
 [Portable host setup](host/SPEC.md) describes the planned setup for macOS/ARM64,
-a local Ubuntu 24.04/ARM64 VM and remote Ubuntu 24.04/AMD64 VMs. Profile-based
+a local Ubuntu 24.04/ARM64 VM and remote Ubuntu 24.04/AMD64 VMs.
+[Host preparation](host/README.md) provides baseline readiness checks and an
+explicit Ubuntu Docker bootstrap. Profile-based
 setup is not implemented yet; existing commands below remain unchanged.
 
 [Use the Nix host shell](host/NIX.md) explains how to prepare, enter and verify
-the host-tool environment. The locked shell has passed native Linux/ARM64
-host-tool checks; native macOS and Linux/AMD64 validation remain pending.
+the host-tool environment. The locked shell has passed native macOS/ARM64 and
+Linux/ARM64 host-tool checks; native Linux/AMD64 validation remains pending.
 
 ## Requirements
 

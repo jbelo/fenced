@@ -4,9 +4,10 @@ Fenced should provide the same Docker-based agent environment on a Mac or Linux
 VM, with reproducible host tools and repeatable setup that preserves existing
 work. Nix selects host tools; Docker isolates agents.
 
-This specification guides the portable setup implementation. Profile loading,
-readiness checks and initialization are planned features. For the host development
-shell available for initial testing, see [Nix host tools](NIX.md).
+This specification guides the portable setup implementation. Baseline readiness
+checks and Ubuntu bootstrap are described in [host preparation](README.md).
+Profile loading, extra-specific checks and harness initialization remain planned.
+For the development shell, see [Nix host tools](NIX.md).
 
 ## Where Fenced runs
 

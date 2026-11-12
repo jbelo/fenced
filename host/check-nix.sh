@@ -15,7 +15,7 @@ before_path=$PATH
 before_git=$(command -v git)
 nix "${nix_args[@]}" develop --no-update-lock-file .#host --command bash --noprofile --norc -c '
   set -euo pipefail
-  for tool in bash git tmux nvim python3 rsync make docker ssh run-shell story-shell meta-shell story-setup; do
+  for tool in bash git tmux nvim python3 rsync make docker ssh run-shell story-shell meta-shell story-setup fenced-doctor; do
     selected=$(command -v "$tool")
     case "$selected" in
       /nix/store/*/bin/*) ;;
@@ -27,6 +27,7 @@ nix "${nix_args[@]}" develop --no-update-lock-file .#host --command bash --nopro
   story-shell --help >/dev/null
   meta-shell --help >/dev/null
   story-setup --help >/dev/null
+  fenced-doctor --help >/dev/null
 '
 [[ $PATH == "$before_path" && $(command -v git) == "$before_git" ]]
 printf '%s\n' 'Native host-tool checks passed; caller PATH and Git selection preserved.'

@@ -1,0 +1,421 @@
+#!/usr/bin/env python3
+"""Validate, plan and initialize an explicit local Fenced host profile."""
+import argparse
+import base64
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import uuid
+
+LABEL = 'dev.fenced.host'
+NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z')
+PLATFORMS = {'macos-arm64', 'ubuntu-24.04-arm64', 'ubuntu-24.04-amd64'}
+
+
+class Error(Exception):
+    pass
+
+
+def require(condition, message):
+    if not condition:
+        raise Error(message)
+
+
+def pairs(items):
+    result = {}
+    for key, value in items:
+        require(key not in result, 'duplicate JSON field: ' + key)
+        result[key] = value
+    return result
+
+
+def read_json(path):
+    return json.loads(Path(path).read_text(), object_pairs_hook=pairs)
+
+
+def digest(value):
+    return hashlib.sha256(value).hexdigest()
+
+
+def encoded(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
+
+
+def fields(value, expected, location):
+    require(type(value) is dict and set(value) == set(expected.split()),
+            location + ': missing or unknown fields')
+
+
+def text(value, location):
+    require(type(value) is str and bool(value) and not any(ord(c) < 32 for c in value),
+            location + ': expected a nonempty string without control characters')
+    return value
+
+
+def name(value, location):
+    require(type(value) is str and NAME.fullmatch(value), location + ': invalid name')
+    return value
+
+
+def path(value):
+    result = Path(value).resolve(strict=True)
+    require(result.is_dir(), 'workspace paths must be existing directories')
+    require(not any(c in str(result) for c in ',:\n\r'), 'workspace paths cannot contain comma, colon or newline')
+    return result
+
+
+def load_profile(filename):
+    filename = Path(filename).resolve(strict=True)
+    p = read_json(filename)
+    fields(p, 'version platform runtime workspace image state network proxy extras', 'profile')
+    require(type(p['version']) is int and p['version'] == 1, 'unsupported profile version')
+    require(type(p['platform']) is str and p['platform'] in PLATFORMS, 'unsupported platform')
+    for key, keys in [('runtime', 'context'), ('workspace', 'root writable'), ('image', 'reference'),
+                      ('state', 'agenthome gomodcache'), ('network', 'internal upstream'), ('proxy', 'image container')]:
+        fields(p[key], keys, key)
+    name(p['runtime']['context'], 'runtime.context')
+    for group, keys in [('state', ['agenthome', 'gomodcache']), ('network', ['internal', 'upstream'])]:
+        for key in keys:
+            name(p[group][key], group + '.' + key)
+        require(p[group][keys[0]] != p[group][keys[1]], group + ': names must be distinct')
+    name(p['proxy']['container'], 'proxy.container')
+    for value in (p['image']['reference'], p['proxy']['image']):
+        text(value, 'image reference')
+        require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._/:@-]*', value), 'invalid image reference')
+    root = path(filename.parent / text(p['workspace']['root'], 'workspace.root'))
+    writable = p['workspace']['writable']
+    require(type(writable) is list and writable, 'workspace.writable must be a nonempty array')
+    children = []
+    for value in writable:
+        child = path(root / text(value, 'writable path'))
+        require(child != root and root in child.parents, 'writable path escapes or grants the whole workspace')
+        require(os.access(child, os.W_OK | os.X_OK), 'writable path is inaccessible')
+        children.append(str(child.relative_to(root)))
+    require(len(set(children)) == len(children), 'duplicate writable paths')
+    require('stories' in children and not (root / 'stories').is_symlink(), 'explicit writable stories directory required')
+    p['workspace'] = {'root': str(root), 'writable': sorted(children)}
+    require(type(p['extras']) is list, 'extras must be an array')
+    for extra in p['extras']:
+        name(extra, 'extra')
+    require(len(set(p['extras'])) == len(p['extras']), 'duplicate extras')
+    require(not p['extras'], 'selected-extra lifecycle is not implemented; use extras: [] for the base harness')
+    return p
+
+
+def run(command, stdin=None):
+    try:
+        proc = subprocess.run(command, input=stdin, text=True, capture_output=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise Error('command unavailable or timed out; inspect retained state before retrying') from exc
+    require(proc.returncode == 0, 'command failed: ' + ' '.join(command[:4]) + ' (raw output withheld)')
+    return proc.stdout.strip()
+
+
+def arch(value):
+    return {'aarch64': 'arm64', 'arm64': 'arm64', 'x86_64': 'amd64', 'amd64': 'amd64'}.get(value)
+
+
+def host_platform():
+    machine = arch(platform.machine())
+    if platform.system() == 'Darwin' and machine == 'arm64':
+        return 'macos-arm64'
+    if platform.system() == 'Linux' and machine:
+        release = platform.freedesktop_os_release()
+        if release.get('ID') == 'ubuntu' and release.get('VERSION_ID') == '24.04':
+            return 'ubuntu-24.04-' + machine
+    raise Error('unsupported host platform')
+
+
+class Docker:
+    def __init__(self, context):
+        self.context = context
+
+    def call(self, *args, stdin=None):
+        return run(['docker', '--context', self.context, *args], stdin)
+
+    def data(self, *args):
+        return json.loads(self.call(*args))
+
+    def inspect(self, kind, resource):
+        # Distinguish absence from daemon/access errors: never interpret inspect errors as absence.
+        listing = self.call(kind, 'ls', '--format', '{{.Name}}' if kind != 'container' else '{{.Names}}',
+                            *(['--all'] if kind == 'container' else []))
+        if resource not in listing.splitlines():
+            return None
+        return self.data(kind, 'inspect', resource)[0]
+
+
+def readiness(p, docker):
+    require(host_platform() == p['platform'], 'profile platform does not match this host')
+    require(os.getuid() != 0, 'run as the normal host operator, not root')
+    for key in ('DOCKER_HOST', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH', 'DOCKER_API_VERSION'):
+        require(not os.environ.get(key), 'unset Docker host/TLS/API overrides')
+    require(os.environ.get('DOCKER_CONTEXT', docker.context) == docker.context, 'conflicting DOCKER_CONTEXT')
+    endpoint = docker.data('context', 'inspect', docker.context, '--format', '{{json .Endpoints.docker.Host}}')
+    require(type(endpoint) is str and endpoint.startswith('unix:///'), 'Docker context must use a local Unix socket')
+    info = docker.data('info', '--format', '{{json .}}')
+    expected = p['platform'].rsplit('-', 1)[1]
+    require(info['OSType'] == 'linux' and arch(info['Architecture']) == expected, 'daemon architecture mismatch')
+    require(not any('rootless' in v for v in info.get('SecurityOptions', [])), 'rootless Docker is unsupported')
+    require(shutil.disk_usage(p['workspace']['root']).free >= 5 * 1024 ** 3, 'workspace requires 5 GiB free')
+    images = {}
+    proxy_defaults = None
+    for key, ref in [('agent', p['image']['reference']), ('proxy', p['proxy']['image'])]:
+        item = docker.data('image', 'inspect', ref)[0]
+        require(item['Os'] == 'linux' and arch(item['Architecture']) == expected, key + ' image architecture mismatch')
+        require(re.fullmatch('sha256:[0-9a-f]{64}', item['Id']), 'invalid immutable image ID')
+        images[key] = item['Id']
+        if key == 'proxy':
+            proxy_defaults = {k: item['Config'].get(k) for k in ('Entrypoint', 'Cmd', 'Env', 'User', 'WorkingDir')}
+    return {'endpoint': endpoint, 'daemon': info['ID'], 'images': images, 'proxy_defaults': proxy_defaults}
+
+
+def assets(checkout):
+    root = Path(checkout).resolve(strict=True)
+    files = {'.go-agent-harness.md': root / 'agent-context.md', '.tmux.conf': root / 'config/tmux.conf'}
+    extras = root / 'extras'
+
+    def safe(relative):
+        value = Path(relative)
+        require(not value.is_absolute() and '..' not in value.parts, 'invalid reference manifest path')
+        source = extras / value
+        require(source.is_file() and not source.is_symlink() and extras in source.resolve().parents,
+                'reference must be a regular file inside extras')
+        return source
+
+    for relative in (extras / 'agent-docs.list').read_text().splitlines():
+        if relative:
+            files['.go-agent-harness/extras/' + relative] = safe(relative)
+    for relative in (extras / 'agent-skills.list').read_text().splitlines():
+        if not relative:
+            continue
+        prefix = '.agents/skills/' + Path(relative).name + '/'
+        files[prefix + 'SKILL.md'] = safe(relative + '/SKILL.md')
+        manifest = extras / relative / 'resources.list'
+        if manifest.exists():
+            for resource in manifest.read_text().splitlines():
+                if resource:
+                    require(not Path(resource).is_absolute() and '..' not in Path(resource).parts, 'invalid skill resource')
+                    files[prefix + resource] = safe(relative + '/' + resource)
+    bundle = {key: base64.b64encode(value.read_bytes()).decode() for key, value in files.items()}
+    squid = root / 'squid.conf'
+    require(squid.is_file() and not squid.is_symlink(), 'missing regular squid.conf')
+    return bundle, squid.read_bytes()
+
+
+def atomic_json(filename, value):
+    fd, temporary = tempfile.mkstemp(prefix='.receipt-', dir=filename.parent)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(value, stream, indent=2)
+            stream.write('\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, filename)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def resource_specs(p):
+    return [('volume', p['state']['agenthome'], 'agenthome'),
+            ('volume', p['state']['gomodcache'], 'gomodcache'),
+            ('network', p['network']['internal'], 'internal'),
+            ('network', p['network']['upstream'], 'upstream'),
+            ('container', p['proxy']['container'], 'proxy')]
+
+
+def inspect_resources(p, docker, receipt, config, runtime):
+    result = []
+    for kind, resource, role in resource_specs(p):
+        item = docker.inspect(kind, resource)
+        if item:
+            labels = item['Config'].get('Labels', {}) if kind == 'container' else item.get('Labels', {})
+            require(receipt and labels.get(LABEL) == receipt['owner'] and labels.get(LABEL + '.role') == role,
+                    'unowned resource conflict: ' + resource)
+            require(labels.get(LABEL + '.config') == config, 'resource configuration conflict: ' + resource)
+            identity = item.get('Id', item.get('Name'))
+            recorded = receipt.get('resources', {}).get(role)
+            require(not recorded or recorded == identity, 'resource identity changed: ' + resource)
+            if kind == 'volume':
+                require(item['Driver'] == 'local' and not item.get('Options'), 'volume driver/options conflict: ' + resource)
+            if kind == 'network':
+                require(item['Driver'] == 'bridge' and item['Internal'] == (role == 'internal')
+                        and not item.get('Options') and not item.get('EnableIPv6'), 'network configuration conflict: ' + resource)
+            if kind == 'container':
+                require(item['Image'] == runtime['images']['proxy'], 'proxy image changed')
+                require(all((item['Config'].get(k) or None) == (v or None) for k, v in runtime['proxy_defaults'].items()), 'proxy command/environment changed')
+                hc = item['HostConfig']
+                require(not hc['Privileged'] and not hc.get('PortBindings') and not hc.get('Binds')
+                        and not hc.get('CapAdd') and not hc.get('Devices') and not hc.get('DeviceRequests')
+                        and not hc.get('PidMode') and not hc.get('VolumesFrom') and not hc.get('ExtraHosts')
+                        and hc['NetworkMode'] == p['network']['upstream'], 'proxy configuration conflict')
+                mounts = item['Mounts']
+                expected_source = str(Path(receipt['directory']) / 'squid.conf')
+                require(len(mounts) == 1 and mounts[0]['Type'] == 'bind' and mounts[0]['Source'] == expected_source
+                        and mounts[0]['Destination'] == '/etc/squid/squid.conf' and not mounts[0]['RW'], 'proxy mount conflict')
+                attached = set(item['NetworkSettings']['Networks'])
+                require(attached <= set(p['network'].values()) and p['network']['upstream'] in attached,
+                        'proxy network conflict')
+                # Only an interrupted setup may have a missing internal attachment or stopped proxy.
+                require(not receipt.get('complete') or attached == set(p['network'].values()), 'proxy network changed')
+                require(not receipt.get('complete') or item['State']['Running'], 'existing proxy stopped; operator action required')
+        elif receipt and receipt.get('complete'):
+            raise Error('initialized resource is missing; explicit repair required: ' + resource)
+        result.append((kind, resource, role, item))
+    return result
+
+
+def execute(p, checkout, state, apply=False):
+    docker = Docker(p['runtime']['context'])
+    runtime = readiness(p, docker)
+    bundle, squid = assets(checkout)
+    helper = Path(__file__).resolve().parent.parent / 'lib/fenced-seed.js'
+    require(helper.is_file(), 'managed-file helper missing')
+    binding = {'profile': p, 'uid': os.getuid(), 'gid': os.getgid(), **runtime}
+    config = digest(encoded(binding))
+    receipt_path = state / 'receipt.json'
+    require(not state.is_symlink(), 'state directory cannot be a symlink')
+    if state.exists():
+        require(state.is_dir() and state.stat().st_uid == os.getuid() and state.stat().st_mode & 0o077 == 0,
+                'state directory must be private and operator-owned')
+    require(not receipt_path.is_symlink() and not (state / 'squid.conf').is_symlink() and not (state / 'lock').is_symlink(),
+            'state files cannot be symlinks')
+    receipt = read_json(receipt_path) if receipt_path.exists() else None
+    if receipt:
+        require(receipt['binding'] == binding, 'profile, operator, daemon or image changed; explicit migration required')
+        require(receipt['directory'] == str(state), 'receipt directory changed')
+        require((not receipt.get('complete') and not (state / 'squid.conf').exists()) or
+                (state / 'squid.conf').read_bytes() == squid, 'proxy config changed; explicit migration required')
+    else:
+        require(not state.exists() or set(v.name for v in state.iterdir()) <= {'lock'}, 'state directory exists without a receipt')
+    resources = inspect_resources(p, docker, receipt, config, runtime)
+    plan = {'profile': p, 'images': runtime['images'], 'resources': [
+        {'kind': k, 'name': n, 'action': 'reuse' if obj else 'create'} for k, n, r, obj in resources],
+        'managed_files': len(bundle), 'state': str(state),
+        'note': 'Apply checks volume ownership and managed-file conflicts using isolated helper containers. No image pulls.'}
+    if not apply:
+        return plan
+    if not state.exists():
+        state.mkdir(mode=0o700, parents=False)
+    require(state.stat().st_uid == os.getuid() and state.stat().st_mode & 0o077 == 0, 'state directory must be private and operator-owned')
+    # Lock is acquired before reinspection; no stale-lock deletion is needed after interruption.
+    with (state / 'lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if receipt_path.exists():
+            receipt = read_json(receipt_path)
+            require(receipt['binding'] == binding, 'receipt changed while waiting')
+        else:
+            receipt = {'version': 1, 'owner': str(uuid.uuid4()), 'directory': str(state),
+                       'binding': binding, 'resources': {}, 'complete': False}
+            # Receipt precedes Docker changes. Configuration is recoverable if interrupted here.
+            atomic_json(receipt_path, receipt)
+        squid_path = state / 'squid.conf'
+        if not squid_path.exists():
+            squid_path.write_bytes(squid)
+        require(squid_path.read_bytes() == squid, 'proxy config conflict')
+        resources = inspect_resources(p, docker, receipt, config, runtime)
+        for kind, resource, role, item in resources:
+            if role == 'proxy':
+                continue
+            if not item:
+                args = [kind, 'create', '--label', LABEL + '=' + receipt['owner'],
+                        '--label', LABEL + '.role=' + role, '--label', LABEL + '.config=' + config]
+                if role == 'internal':
+                    args += ['--internal']
+                docker.call(*args, resource)
+                item = docker.inspect(kind, resource)
+                require(item, 'created resource cannot be inspected')
+            receipt['resources'][role] = item.get('Id', item.get('Name'))
+            atomic_json(receipt_path, receipt)
+        # No recursive chown and no image copy-up. Only an empty volume root may change owner.
+        for volume in p['state'].values():
+            docker.call('run', '--rm', '--pull=never', '--network=none', '--read-only', '--cap-drop=ALL',
+                        '--cap-add=CHOWN', '--security-opt=no-new-privileges', '--user=0:0',
+                        '--mount', 'type=volume,src=' + volume + ',target=/state,volume-nocopy',
+                        '--entrypoint=sh', runtime['images']['agent'], '-ec',
+                        'if [ "$(stat -c %u:%g /state)" != "$1:$2" ]; then '
+                        '[ -z "$(ls -A /state)" ] || exit 1; chown "$1:$2" /state; fi',
+                        'fenced-owner', str(os.getuid()), str(os.getgid()))
+        docker.call('run', '--rm', '-i', '--pull=never', '--network=none', '--read-only', '--cap-drop=ALL',
+                    '--security-opt=no-new-privileges', '--user', f'{os.getuid()}:{os.getgid()}',
+                    '--mount', 'type=volume,src=' + p['state']['agenthome'] + ',target=/home/agent,volume-nocopy',
+                    '--entrypoint=node', runtime['images']['agent'], '-e', helper.read_text(),
+                    stdin=json.dumps(bundle))
+        # Reinspect immediately before creating/connecting/starting the proxy.
+        proxy = inspect_resources(p, docker, receipt, config, runtime)[-1][3]
+        if not proxy:
+            docker.call('create', '--pull=never', '--name', p['proxy']['container'],
+                        '--label', LABEL + '=' + receipt['owner'], '--label', LABEL + '.role=proxy',
+                        '--label', LABEL + '.config=' + config, '--network', p['network']['upstream'],
+                        '--mount', f'type=bind,src={squid_path},target=/etc/squid/squid.conf,readonly',
+                        runtime['images']['proxy'])
+            proxy = docker.inspect('container', p['proxy']['container'])
+        receipt['resources']['proxy'] = proxy['Id']
+        atomic_json(receipt_path, receipt)
+        if p['network']['internal'] not in proxy['NetworkSettings']['Networks']:
+            docker.call('network', 'connect', p['network']['internal'], p['proxy']['container'])
+        if not proxy['State']['Running']:
+            docker.call('start', p['proxy']['container'])
+        proxy = docker.inspect('container', p['proxy']['container'])
+        require(proxy['State']['Running'], 'proxy did not remain running; inspect it before resuming')
+        receipt['complete'] = True
+        atomic_json(receipt_path, receipt)
+    return {**plan, 'applied': True, 'receipt': str(receipt_path)}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', choices=['validate', 'plan', 'init', 'launch'])
+    parser.add_argument('--profile', required=True)
+    parser.add_argument('--source', help='Fenced checkout containing reference manifests and squid.conf')
+    parser.add_argument('--state-dir', help='new private host directory for receipt and proxy config; parent must exist')
+    parser.add_argument('--apply', action='store_true', help='required with init; plan is otherwise read-only')
+    args = parser.parse_args(argv)
+    try:
+        p = load_profile(args.profile)
+        require(not args.apply or args.action == 'init', '--apply is only valid with init')
+        if args.action == 'validate':
+            result = {'valid': True, 'profile': p}
+        else:
+            require(args.source and args.state_dir, '--source and --state-dir are required')
+            require(args.action != 'init' or args.apply, 'init requires --apply; use plan to inspect first')
+            state = Path(os.path.abspath(args.state_dir))
+            require(not any(c in str(state) for c in ',:\n\r'), 'invalid state directory path')
+            require(state.parent.is_dir() and state.parent.resolve() == state.parent, 'state parent must exist without symlink components')
+            result = execute(p, args.source, state, args.apply)
+        if args.action == 'launch':
+            receipt = read_json(state / 'receipt.json')
+            require(receipt.get('complete') and all(v['action'] == 'reuse' for v in result['resources']),
+                    'initialize the profile before launching')
+            launcher = Path(__file__).resolve().parent / 'meta-shell'
+            if not launcher.exists():
+                launcher = Path(args.source).resolve() / 'bin/meta-shell'
+            env = {k: v for k, v in os.environ.items() if k in
+                   ('PATH', 'HOME', 'USER', 'LOGNAME', 'TERM', 'COLORTERM', 'LANG', 'LC_ALL', 'TMPDIR')}
+            env.update({'DOCKER_CONTEXT': p['runtime']['context'], 'AGENTHOME': p['state']['agenthome'],
+                        'GOMODCACHE': p['state']['gomodcache'], 'AGENT_INTERNAL_NETWORK': p['network']['internal'],
+                        'EGRESS_PROXY_ENABLE': '1', 'EGRESS_PROXY_URL': 'http://' + p['proxy']['container'] + ':3128',
+                        'NO_PROXY': 'localhost,127.0.0.1', 'MEMTY_ENABLE': '0', 'WORKSPACE_RW_ENABLE': 'false'})
+            command = [str(launcher), '--workspace-root', p['workspace']['root'], '--workspace-readonly',
+                       '--image', result['images']['agent']]
+            for writable in p['workspace']['writable']:
+                command += ['--workspace-rw', writable]
+            os.execve(launcher, command, env)
+        print(json.dumps(result, indent=2))
+        return 0
+    except (Error, OSError, ValueError, KeyError, TypeError) as exc:
+        print('fenced-harness: ' + (str(exc) if isinstance(exc, Error) else 'invalid metadata or filesystem/lock access failed'), file=sys.stderr)
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

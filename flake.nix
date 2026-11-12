@@ -34,7 +34,7 @@
           hostCommands = lib.concatMap (dir: regularFiles (dir + "/host-bin")) extraDirs;
           hooks = builtins.filter (path: lib.hasSuffix ".sh" (toString path))
             (lib.concatMap (dir: regularFiles (dir + "/run-shell.d")) extraDirs);
-          commands = map (name: ./bin + "/${name}") launchers ++ hostCommands;
+          commands = map (name: ./bin + "/${name}") launchers ++ regularFiles ./host/bin ++ hostCommands;
           names = map builtins.baseNameOf commands;
           hookNames = map builtins.baseNameOf hooks;
           installFile = mode: destination: path: ''
@@ -49,7 +49,8 @@
               nativeBuildInputs = [ pkgs.makeWrapper ];
               buildInputs = [ pkgs.bash pkgs.python3 ];
               installPhase = ''
-                mkdir -p "$out/bin/run-shell.d"
+                mkdir -p "$out/bin/run-shell.d" "$out/lib"
+                install -m 0644 ${./host/lib/fenced-seed.js} "$out/lib/fenced-seed.js"
                 ${lib.concatMapStrings (installFile "0755" "bin") commands}
                 ${lib.concatMapStrings (installFile "0644" "bin/run-shell.d") hooks}
                 patchShebangs "$out/bin"
@@ -90,6 +91,8 @@
             meta-shell --help >/dev/null
             story-setup --help >/dev/null
             agent-status --help >/dev/null
+            fenced-doctor --help >/dev/null
+            fenced-harness --help >/dev/null
             ${lib.concatMapStrings (path: "test -f ${launchersPackage}/bin/run-shell.d/${builtins.baseNameOf path}\n") hooks}
             touch "$out"
           '';
