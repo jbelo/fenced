@@ -127,5 +127,6 @@ initialization check these before mutating Docker resources. No service, Git fet
 or tmux window is started by initialization. The reviewed `story-setup apply`
 command remains an explicit host action, and the requested tmux session must exist.
 Credentials and optional private templates require separate operator enrollment.
-The local ARM64 VM handoff is tested with a local Git fixture; native AMD64 and
-external authenticated fetch remain separate validation requirements.
+The handoff is tested with local Git fixtures on Ubuntu 24.04 ARM64 and Ubuntu
+26.04 AMD64. Ubuntu 26.04 ARM64 revalidation and external authenticated fetch
+remain separate validation requirements.

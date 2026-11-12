@@ -64,7 +64,7 @@ def main():
             require(re.fullmatch(r'[A-Za-z0-9./_-]+@sha256:[0-9a-f]{64}', bases[key]), 'inputs require immutable base digests')
         require(args.go_image == 'golang:1.27.3-bookworm' and args.debian_image == 'debian:12-slim', 'do not combine input file with base overrides')
         args.go_image, args.debian_image = bases['go'], bases['debian']
-        build_args = inputs['build_args']
+        build_args = dict(inputs['build_args'], NODE_SHA256=bases['node_sha256'])
         require(set(build_args) == {'GIT_VERSION','GIT_SHA256','TMUX_VERSION','TMUX_SHA256','NODE_VERSION','CODEX_VERSION','CLAUDE_VERSION','DEBIAN_SNAPSHOT','NODE_DIST_VERSION','NODE_SHA256','LOCKED_NPM'}, 'unexpected build input fields')
         for key,value in build_args.items():
             require(type(value) is str and re.fullmatch(r'[A-Za-z0-9.+_-]+',value), 'invalid build input')

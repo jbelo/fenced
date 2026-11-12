@@ -41,9 +41,9 @@ def host_platform():
             release = platform.freedesktop_os_release()
         except OSError as exc:
             raise CheckError('cannot read Linux release') from exc
-        if release.get('ID') == 'ubuntu' and release.get('VERSION_ID') == '24.04':
-            return 'ubuntu-24.04-' + arch, arch
-    raise CheckError('supported hosts: macOS ARM64 or Ubuntu 24.04 ARM64/AMD64')
+        if release.get('ID') == 'ubuntu' and release.get('VERSION_ID') in ('24.04', '26.04'):
+            return 'ubuntu-' + release['VERSION_ID'] + '-' + arch, arch
+    raise CheckError('supported hosts: macOS ARM64 or Ubuntu 24.04/26.04 ARM64/AMD64')
 
 
 def directory(path):

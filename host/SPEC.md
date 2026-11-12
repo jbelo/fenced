@@ -15,8 +15,8 @@ For the development shell, see [Nix host tools](NIX.md).
 | Host | Runtime | Purpose |
 | --- | --- | --- |
 | macOS/ARM64 | Existing Colima | Preserve the current local workflow |
-| Ubuntu 24.04 LTS/ARM64 | Docker Engine in a separate local VM | Test Linux setup and behavior on the Mac |
-| Ubuntu 24.04 LTS/AMD64 | Docker Engine in a remote VM | Validate native AMD64 operation |
+| Ubuntu 26.04 LTS/ARM64 | Docker Engine in a separate local VM | Test Linux setup and behavior on the Mac |
+| Ubuntu 26.04 LTS/AMD64 | Docker Engine in a remote VM | Validate native AMD64 operation |
 
 On either Linux VM, connect over SSH and run Fenced inside the guest. Its
 workspace, Git credentials, tmux sessions and Docker storage belong to that VM.
@@ -59,7 +59,7 @@ Portable commands take an explicit, nonsecret JSON profile. Version 1 contains:
 
 | Fields | Meaning |
 | --- | --- |
-| `version`, `platform` | Integer `1`; `macos-arm64`, `ubuntu-24.04-arm64` or `ubuntu-24.04-amd64` |
+| `version`, `platform` | Integer `1`; `macos-arm64`, `ubuntu-26.04-arm64` or `ubuntu-26.04-amd64` |
 | `runtime.context` | Docker context resolving to a local socket and matching daemon architecture |
 | `workspace.root`, `workspace.writable` | Existing root and explicitly writable subdirectories |
 | `image.reference` | Agent image tag or digest; verify architecture and report its resolved ID |
@@ -135,3 +135,10 @@ launcher installation paths. Completion requires evidence that:
 
 Record actual revisions, results and limitations for each platform. Argument
 checks, cross-compilation and emulation do not establish native runtime behavior.
+
+## Target revision — 2026-11-12
+
+Owner selected Ubuntu 26.04 for Linux validation. Ubuntu 24.04 profile/bootstrap
+compatibility remains for existing installations. Earlier ARM64 evidence used
+24.04 and does not validate 26.04. Local ARM64 and Mac rechecks are explicitly
+deferred while remote AMD64 validation proceeds.

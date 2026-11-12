@@ -1,6 +1,6 @@
 # Portable feedback delivery
 
-Copy this entire directory to the fresh Ubuntu 24.04 ARM64 or AMD64 host. It
+Copy this entire directory to the fresh Ubuntu 26.04 ARM64 or AMD64 host. It
 contains the immutable source archive itself; no Mac Docker cache, registry
 publication, Git checkout, provider credential or runtime state is required.
 
@@ -96,3 +96,8 @@ pass the newly verified consumer tag as AGENT_GATEWAY_IMAGE to its existing buil
 interface; the other all-image dependencies require their own portable validation.
 Selecting the gateway service in a host profile remains unsupported until a safe
 service lifecycle adapter and operator credential enrollment are implemented.
+
+Native consumer verification now covers Ubuntu 24.04 ARM64 and Ubuntu 26.04
+AMD64: source tests, binary checksums, image assembly and executable mock feedback
+pagination/replies/isolation. The primary Linux target moved to 26.04; local ARM64
+rechecks are deferred. This is not authenticated live-provider evidence.

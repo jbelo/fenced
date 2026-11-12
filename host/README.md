@@ -1,7 +1,7 @@
 # Prepare and check a host
 
 Use these commands on the machine that runs Docker: your Mac, or inside an
-Ubuntu 24.04 ARM64/AMD64 VM. They prepare/check host prerequisites only. They do
+Ubuntu 26.04 ARM64/AMD64 VM. They prepare/check host prerequisites only. They do
 not initialize the agent harness themselves. Profile initialization is described
 below; the broader requirements are in [the setup specification](SPEC.md).
 
@@ -33,7 +33,7 @@ extra checks remain separate from baseline readiness.
 
 ## Prepare a fresh Ubuntu VM
 
-Use an existing Ubuntu 24.04 VM with a normal operator account and sudo access.
+Use an existing Ubuntu 26.04 VM with a normal operator account and sudo access.
 Nix installation is separate. First inspect the plan from the Fenced checkout:
 
 ```sh
@@ -98,9 +98,9 @@ configuration and unlisted home files remain intact. Initialization does not
 install Pi or enroll credentials. Launch selects the profile's image and mounts
 through meta-shell, with a controlled environment and no optional template mount.
 
-This command is under validation. The base/story-setup path has local ARM64 evidence. Native AMD64, external Git
-authentication and other selected extras remain pending; use isolated resources
-while testing.
+The base/story-setup path is verified on Ubuntu 26.04 AMD64. Earlier ARM64
+evidence used Ubuntu 24.04; 26.04 ARM64 and Mac rechecks are deferred. External
+Git authentication and other service extras remain separate validation work.
 
 Selecting story-setup checks host tools and required agent skills before Docker
 mutation. Initialization never applies setup requests or creates host tmux sessions.
@@ -146,8 +146,8 @@ before extraction. Their checksums were captured from the versioned upstream
 HTTPS archives; no upstream release-signature verification is claimed. Overriding
 a source version requires supplying its corresponding checksum.
 
-The current input file intentionally has only an ARM64 entry; AMD64 requires its
-own verified base references. It fails instead of selecting ARM64 images. This path uses dated Debian snapshots with package signature verification, an
+The input file has separate ARM64 and AMD64 entries, including native Node archive
+checksums. Missing native entries fail instead of selecting another architecture. This path uses dated Debian snapshots with package signature verification, an
 official Node archive with SHA-256 verification, and npm ci with integrity-locked
 packages and lifecycle scripts disabled. Claude is linked directly to its
 integrity-verified native package; a missing or unusable binary fails the build. It does not execute the NodeSource setup

@@ -7,7 +7,7 @@ commands, including the read-only `fenced-doctor`. See [host preparation](README
 for readiness checks and Ubuntu bootstrap. Entering the shell does not install or
 start the Docker harness.
 
-The targets are macOS/ARM64, Ubuntu 24.04/ARM64 and Ubuntu 24.04/AMD64. Run the
+The targets are macOS/ARM64, Ubuntu 26.04/ARM64 and Ubuntu 26.04/AMD64. Run the
 commands below from the Fenced Git checkout on the machine you are using. Nix
 must already be installed and its daemon accessible.
 

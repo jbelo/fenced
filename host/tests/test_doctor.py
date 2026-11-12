@@ -125,6 +125,13 @@ class DoctorTests(unittest.TestCase):
             with self.assertRaises(doctor.CheckError):
                 doctor.host_platform()
 
+    def test_ubuntu_2604_both_architectures(self):
+        with patch.object(doctor.platform, 'system', return_value='Linux'), \
+             patch.object(doctor.platform, 'freedesktop_os_release', return_value={'ID': 'ubuntu', 'VERSION_ID': '26.04'}):
+            for machine, arch in (('aarch64', 'arm64'), ('x86_64', 'amd64')):
+                with patch.object(doctor.platform, 'machine', return_value=machine):
+                    self.assertEqual(doctor.host_platform(), ('ubuntu-26.04-' + arch, arch))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -3,7 +3,13 @@
   "platforms": {
     "arm64": {
       "go": "golang@sha256:dc0963f32053e4bc451d24d87e3892d42d01021b61f093e98eb95c0352bb84b0",
-      "debian": "debian@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc"
+      "debian": "debian@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc",
+      "node_sha256": "6e51a2ada00f0011cc266f65d98922b403d7ad88f809ca2aa615a5fe1ce6e86c"
+    },
+    "amd64": {
+      "go": "golang@sha256:dc0963f32053e4bc451d24d87e3892d42d01021b61f093e98eb95c0352bb84b0",
+      "debian": "debian@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc",
+      "node_sha256": "4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb"
     }
   },
   "build_args": {
@@ -16,7 +22,6 @@
     "CLAUDE_VERSION": "2.1.322",
     "DEBIAN_SNAPSHOT": "20261112T000000Z",
     "NODE_DIST_VERSION": "24.22.3",
-    "NODE_SHA256": "6e51a2ada00f0011cc266f65d98922b403d7ad88f809ca2aa615a5fe1ce6e86c",
     "LOCKED_NPM": "1"
   }
 }

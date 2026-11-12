@@ -17,7 +17,7 @@ import uuid
 
 LABEL = 'dev.fenced.host'
 NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z')
-PLATFORMS = {'macos-arm64', 'ubuntu-24.04-arm64', 'ubuntu-24.04-amd64'}
+PLATFORMS = {'macos-arm64', 'ubuntu-24.04-arm64', 'ubuntu-24.04-amd64', 'ubuntu-26.04-arm64', 'ubuntu-26.04-amd64'}
 
 
 class Error(Exception):
@@ -161,8 +161,8 @@ def host_platform():
         return 'macos-arm64'
     if platform.system() == 'Linux' and machine:
         release = platform.freedesktop_os_release()
-        if release.get('ID') == 'ubuntu' and release.get('VERSION_ID') == '24.04':
-            return 'ubuntu-24.04-' + machine
+        if release.get('ID') == 'ubuntu' and release.get('VERSION_ID') in ('24.04', '26.04'):
+            return 'ubuntu-' + release['VERSION_ID'] + '-' + machine
     raise Error('unsupported host platform')
 
 

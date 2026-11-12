@@ -25,7 +25,7 @@ class ProfileTests(unittest.TestCase):
         self.root = Path(self.tmp.name).resolve()
         (self.root / 'workspace/stories').mkdir(parents=True)
         self.filename = self.root / 'profile.json'
-        self.profile = {'version': 1, 'platform': 'ubuntu-24.04-arm64', 'runtime': {'context': 'default'},
+        self.profile = {'version': 1, 'platform': 'ubuntu-26.04-arm64', 'runtime': {'context': 'default'},
                         'workspace': {'root': 'workspace', 'writable': ['stories']},
                         'image': {'reference': 'agent:test'}, 'state': {'agenthome': 'test-home', 'gomodcache': 'test-go'},
                         'network': {'internal': 'test-internal', 'upstream': 'test-upstream'},

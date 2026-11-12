@@ -24,9 +24,10 @@ for arg in "$@"; do
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
-[[ $(uname -s) == Linux ]] || { echo 'Requires Ubuntu 24.04.' >&2; exit 1; }
+[[ $(uname -s) == Linux ]] || { echo 'Requires Ubuntu 24.04 or 26.04.' >&2; exit 1; }
 . /etc/os-release
-[[ $ID == ubuntu && $VERSION_ID == 24.04 ]] || { echo 'Requires Ubuntu 24.04.' >&2; exit 1; }
+[[ $ID == ubuntu && ( $VERSION_ID == 24.04 || $VERSION_ID == 26.04 ) ]] || { echo 'Requires Ubuntu 24.04 or 26.04.' >&2; exit 1; }
+case "$VERSION_ID" in 24.04) suite=noble ;; 26.04) suite=resolute ;; esac
 arch=$(dpkg --print-architecture)
 case "$arch" in arm64|amd64) ;; *) echo 'Requires ARM64 or AMD64.' >&2; exit 1 ;; esac
 [[ $(id -u) != 0 ]] || { echo 'Run as the normal operator; the apply step invokes sudo.' >&2; exit 1; }
@@ -80,7 +81,7 @@ if [[ $fresh == 1 ]]; then
   cat > "$source_file" <<SOURCE
 Types: deb
 URIs: https://download.docker.com/linux/ubuntu
-Suites: noble
+Suites: $suite
 Components: stable
 Architectures: $arch
 Signed-By: /etc/apt/keyrings/fenced-docker.asc
