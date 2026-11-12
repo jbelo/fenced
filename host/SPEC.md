@@ -67,8 +67,11 @@ Portable commands take an explicit, nonsecret JSON profile. Version 1 contains:
 | `network.internal`, `network.upstream` | Distinct internal-only agent and proxy upstream networks |
 | `proxy.image`, `proxy.container` | Architecture-matched proxy image and container name; derive its URL using port 3128 |
 | `extras` | Unique identifiers of explicitly selected extras |
+| `services` | Optional extra-owned service configuration; required exactly for selected service extras |
 
-All fields are required. Resolve a relative workspace root against the profile's
+The base fields are required; `services` is optional unless a service extra is
+selected. Service profiles also require an explicit private IPv4 `network.subnet`.
+Resolve a relative workspace root against the profile's
 location and writable paths against that root. Canonicalize paths and reject
 symlink escapes. Whole-workspace writes require a separate explicit action.
 
@@ -142,3 +145,15 @@ Owner selected Ubuntu 26.04 for Linux validation. Ubuntu 24.04 profile/bootstrap
 compatibility remains for existing installations. Earlier ARM64 evidence used
 24.04 and does not validate 26.04. Local ARM64 and Mac rechecks are explicitly
 deferred while remote AMD64 validation proceeds.
+
+## Service lifecycle
+
+The gateway adapter validates its own enrollment under extras/agent-gateway.
+The host manages receipt-owned containers with explicit `init`, `start`, `stop`
+and launch readiness checks. Repeated init preserves running service identity;
+explicitly stopped profiles require start. Stop retains resources and agent
+sessions. Failed service readiness leaves initialization incomplete. Interrupted
+initialization/start/stop is resumable; unowned resources and changed enrollment
+require explicit operator action. Credential contents never enter plans, receipts,
+agent homes or images. See the gateway README for exact runtime-file permissions
+and migration limits. This does not imply readiness adapters for other services.

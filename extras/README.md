@@ -43,3 +43,6 @@ existing agent homes.
 
 Database service containers and their data volumes are separate from the agent
 home volume. Follow each extra's lifecycle instructions to manage them.
+
+The [gateway host-profile lifecycle](agent-gateway/README.md#host-profile-lifecycle)
+supports explicit enrollment, readiness and receipt-owned start/stop.

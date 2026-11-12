@@ -146,3 +146,81 @@ GATEWAY_AGENT_IP and AGENT_NETWORK settings as the existing deployment.
 GATEWAY_CONTAINER_NAME overrides the name when explicitly needed; pass the same
 name to verify-feedback.py --gateway. This is Fenced deployment configuration;
 the upstream generic Compose artifact remains unchanged.
+
+## Host-profile lifecycle
+
+The portable host harness can manage a gateway service. Build a native portable
+server and matching client/all image first; this path never pulls or builds images.
+Use a new profile, state directory and resource names when adding the service to
+an existing installation. Existing profiles and legacy Make targets are unchanged.
+
+Select `"agent-gateway"` in `extras`, add an unused private IPv4 `network.subnet`
+(`/16` through `/28`), and add this top-level section:
+
+```json
+"services": {
+  "agent-gateway": {
+    "container": "my-profile-gateway",
+    "image": "fenced-amd64-gateway:validation",
+    "address": "172.28.240.10",
+    "config": "/absolute/private-runtime/config.json",
+    "policy": "/absolute/private-runtime/policy.json",
+    "secrets": {}
+  }
+}
+```
+
+For this example, use `"subnet": "172.28.240.0/24"` in `network`, after checking
+it does not overlap other networks. Keep `internal` and `upstream` names there.
+The agent image must contain executable `/usr/local/bin/agentctl` and the matching
+`AGENTCTL_CONFIG=/etc/agentctl/config.json` pointing to `http://agent-gateway:8080`.
+The hostname is a network alias; the container name remains profile-specific.
+
+Supply gateway config/policy matching the delivered gateway schema. Config must
+bind `172.28.240.10:8080` (the chosen internal address), with policy path
+`/etc/agent-gateway/policy.json`. It must not bind all interfaces. In live mode,
+map every configured `/run/secrets/NAME` to a host file in `secrets`, for example
+`"secrets": {"github_token": "/absolute/private-runtime/github_token"}`.
+Only file-based credentials are accepted. Mock mode mounts no secrets, even if
+its example config contains unused token-file references. Readiness checks never
+call providers and do not establish valid provider authentication.
+
+Runtime files must be outside the agent workspace, without symlinks/hard links,
+each directly inside an operator-owned **0700** directory. Config and policy
+must be operator-owned mode **0444**. Credential files must be owned by numeric
+UID **10001**, mode **0400**, as enforced by the gateway. The private directory
+protects the host paths; the gateway reads individual bind-mounted files as UID
+10001. Prepare the private directory before enrolling credentials, and use an
+operator-approved privileged enrollment step for credential ownership. The harness does not chmod, copy, print
+or read credential contents. It records file identity metadata to detect changes;
+config/policy content hashes are recorded. Do not edit enrolled files concurrently.
+Credentials/config/policy are mounted only into the gateway, never the agent.
+
+Use the same `--profile`, `--source` and `--state-dir` for each command:
+
+```sh
+fenced-harness plan   --profile profile.json --source "$PWD" --state-dir "$HOME/my-profile-state"
+fenced-harness init  --profile profile.json --source "$PWD" --state-dir "$HOME/my-profile-state" --apply
+fenced-harness launch --profile profile.json --source "$PWD" --state-dir "$HOME/my-profile-state"
+fenced-harness stop  --profile profile.json --source "$PWD" --state-dir "$HOME/my-profile-state" --apply
+fenced-harness start --profile profile.json --source "$PWD" --state-dir "$HOME/my-profile-state" --apply
+```
+
+`init` checks the client image, creates receipt-owned resources and waits for
+service readiness. Repeated initialization preserves healthy container identity
+and uptime. `launch` requires a complete, running profile and ready gateway.
+`stop` stops only the receipt-owned gateway and proxy; it retains volumes, networks,
+files and containers, and does not terminate agent sessions. `start` reuses those
+containers and checks readiness; it can also resume an interrupted initialization.
+`init` does not implicitly restart an explicitly stopped profile. Interrupted
+start/stop operations can be retried explicitly. Incomplete failed setup can be
+stopped without deleting evidence. Failed readiness never marks init complete.
+
+Containers run with read-only roots, dropped capabilities, no privilege escalation,
+forwarding disabled and no published ports. The gateway uses the profile's upstream
+network for provider requests and listens only on the internal network. Stop/start
+rechecks ownership, identity, mounts, topology and configuration. Changed images,
+files or profile settings require explicit migration; no automatic replacement,
+credential rotation, adoption of unrelated containers, or destructive cleanup is
+provided. Retain the original inputs when operating a profile; if they are lost or
+changed, inspect its receipt and arrange operator-led repair.

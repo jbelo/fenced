@@ -99,3 +99,8 @@ CLI-local errors have null request_id; this does not prove the gateway never saw
 the attempt. Do not include raw provider content, search text or secrets in error
 reports. Successful data already received remains valid as an observation when a
 later page fails; never present partial results as complete.
+
+For a host-managed profile, the same `agent-gateway:8080` endpoint is provided
+through an internal network alias. If it becomes unavailable during a session,
+report it to the host operator. The agent cannot start the service or enroll
+credentials; local readiness does not prove provider authentication.

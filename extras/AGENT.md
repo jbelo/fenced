@@ -40,3 +40,8 @@ Report missing prerequisites to the developer.
 Service data and the agent home are persistent state. Do not reset them unless
 asked. This overview and installed skills are refreshed from repository sources;
 keep personal notes elsewhere.
+
+With a host-managed gateway profile, `agent-gateway:8080` is the profile-local
+endpoint. A running agent session may outlive a stopped gateway; report
+unavailability to the host operator. Provider credentials and policy remain
+outside the agent. Readiness does not establish provider authentication.

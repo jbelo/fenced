@@ -76,12 +76,15 @@ inside the disposable VM, never against the existing Mac harness.
 
 ## Profile initialization (base harness)
 
-`fenced-harness` provides `validate`, `plan`, `init --apply`, and `launch`.
+`fenced-harness` provides `validate`, `plan`, `init --apply`, `launch`, and explicit
+`start --apply` / `stop --apply` for receipt-owned service containers.
 Supply `--profile /path/to/profile.json` using the fields in [SPEC.md](SPEC.md).
 For plan, init and launch, also supply `--source /path/to/fenced` and
 `--state-dir /path/to/private-state`; the state directory's parent must exist.
 Use unique resource names and `extras: []` for the base harness, or
 `"extras": ["story-setup"]` to check the host Git/tmux handoff prerequisites.
+The `agent-gateway` extra also has a service adapter; see its
+[profile lifecycle and enrollment requirements](../extras/agent-gateway/README.md#host-profile-lifecycle).
 Other extras are rejected until their profile adapters are implemented.
 Agent and proxy images must already exist locally and match the host architecture.
 The agent image must provide Node, sh, stat and chown for isolated setup helpers.

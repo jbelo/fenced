@@ -111,3 +111,8 @@ New shell launches resolve unknown numeric UIDs as `agent-<uid>` through
 `libnss_wrapper`; this does not change file ownership or permissions. Existing tmux
 servers keep their environment until restarted; a missing username is cosmetic
 for the prompt and does not require interrupting a running task.
+
+With a host-managed gateway profile, `agent-gateway:8080` is the profile-local
+endpoint. A running agent session may outlive a stopped gateway; report
+unavailability to the host operator. Provider credentials and policy remain
+outside the agent. Readiness does not establish provider authentication.

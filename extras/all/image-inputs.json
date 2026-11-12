@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "platforms": {
+    "amd64": {
+      "images": {
+        "java": "eclipse-temurin@sha256:6a11121e5419a1eb4def2bba2f74a4c1b560395b9c26b52e37485d2bf58f7958",
+        "redpanda": "docker.redpanda.com/redpandadata/redpanda@sha256:12ddbd8e5572210a48d39afecac44db61503ce1cbdae50ee9b1ff5998a8d91e1",
+        "openbao": "quay.io/openbao/openbao@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf"
+      },
+      "fdb_version": "7.3.68",
+      "fdb_sha256": "7b53c88f529f771febd68dc34c8614c2e4379f2a1b032ed203f81d9b11c52302"
+    },
+    "arm64": {
+      "images": {
+        "java": "eclipse-temurin@sha256:6a11121e5419a1eb4def2bba2f74a4c1b560395b9c26b52e37485d2bf58f7958",
+        "redpanda": "docker.redpanda.com/redpandadata/redpanda@sha256:12ddbd8e5572210a48d39afecac44db61503ce1cbdae50ee9b1ff5998a8d91e1",
+        "openbao": "quay.io/openbao/openbao@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf"
+      },
+      "fdb_version": "7.3.68",
+      "fdb_sha256": "07624baeb3d2fc451a68f6bcae7aa0fb7d5bd64aa8ff2fb0f81bcc49a035216f"
+    }
+  }
+}

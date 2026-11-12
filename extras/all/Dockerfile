@@ -3,11 +3,12 @@ ARG AGENT_GATEWAY_IMAGE=go-agent-gateway
 ARG TERRAFORM_IMAGE=go-agent-terraform
 ARG OPENBAO_IMAGE=quay.io/openbao/openbao:2.7.1
 ARG REDPANDA_VERSION=v26.1.6
+ARG REDPANDA_IMAGE=docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION}
 ARG JAVA_IMAGE=eclipse-temurin:25-jre-jammy@sha256:6a11121e5419a1eb4def2bba2f74a4c1b560395b9c26b52e37485d2bf58f7958
 
 FROM ${JAVA_IMAGE} AS java-runtime
 
-FROM docker.redpanda.com/redpandadata/redpanda:${REDPANDA_VERSION} AS redpanda
+FROM ${REDPANDA_IMAGE} AS redpanda
 
 FROM ${TERRAFORM_IMAGE} AS terraform
 
@@ -18,6 +19,7 @@ FROM ${AGENT_GATEWAY_IMAGE} AS gateway-client
 FROM ${BASE_IMAGE}
 
 ARG FDB_VERSION=7.3.68
+ARG FDB_SHA256
 ARG TARGETARCH
 
 COPY --from=redpanda /usr/bin/rpk /usr/local/bin/rpk
@@ -42,6 +44,7 @@ RUN set -eux; \
     esac; \
     curl -fL -o /tmp/foundationdb-clients.deb \
       "https://github.com/apple/foundationdb/releases/download/${FDB_VERSION}/foundationdb-clients_${FDB_VERSION}-1_${fdb_arch}.deb"; \
+    if [ -n "$FDB_SHA256" ]; then echo "$FDB_SHA256  /tmp/foundationdb-clients.deb" | sha256sum -c -; fi; \
     dpkg -i /tmp/foundationdb-clients.deb || apt-get install -y -f; \
     rm -f /tmp/foundationdb-clients.deb; \
     rm -rf /var/lib/apt/lists/*
