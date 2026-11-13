@@ -32,6 +32,15 @@ def prepare(h, p, docker, catalog):
             files.append({'source':source,'target':target,'identity':identity,
                           'sha256':None if secret else hashlib.sha256(Path(source).read_bytes()).hexdigest()})
         spec['files'] = files
+        for volume in spec.get('volumes', []):
+            info = docker.inspect('volume', volume['name'])
+            h.require(info and info.get('Driver') == 'local' and not info.get('Options') and
+                      all((info.get('Labels') or {}).get(k) == v for k,v in volume['required_label'].items()),
+                      'missing or incompatible externally staged service volume')
+            volume['identity'] = {k:info.get(k) for k in ('Name','CreatedAt','Mountpoint','Driver','Options','Labels')}
+            helper = docker.data('image','inspect',volume['helper_image'])[0]
+            h.require(helper['Os'] == 'linux' and h.arch(helper['Architecture']) == p['platform'].rsplit('-',1)[1], 'credential helper architecture mismatch')
+            volume['helper_image'] = helper['Id']
         result[key] = spec
     return result
 
@@ -50,8 +59,8 @@ def inspect(h, p, item, spec, allow_stopped=False):
               and hc.get('RestartPolicy',{}).get('Name') == 'no'
               and hc['NetworkMode'] == p['network']['upstream']
               and hc.get('Sysctls') == {'net.ipv4.ip_forward':'0','net.ipv6.conf.all.forwarding':'0'}, 'service hardening changed')
-    actual = sorted((v['Type'],v['Source'],v['Destination'],v['RW']) for v in item['Mounts'])
-    expected = sorted(('bind',v['source'],v['target'],False) for v in spec['files'])
+    actual = sorted((v['Type'],v.get('Name') if v['Type']=='volume' else v['Source'],v['Destination'],v['RW']) for v in item['Mounts'])
+    expected = sorted([('bind',v['source'],v['target'],False) for v in spec['files']] + [('volume',v['name'],v['target'],False) for v in spec.get('volumes',[])])
     h.require(actual == expected, 'service mount conflict')
     nets = item['NetworkSettings']['Networks']
     h.require(set(nets) <= {p['network']['internal'],p['network']['upstream']} and p['network']['upstream'] in nets, 'service network conflict')
@@ -86,6 +95,8 @@ def start(h, p, docker, receipt, runtime, config, save):
                     '--sysctl','net.ipv6.conf.all.forwarding=0']
             for mount in spec['files']:
                 args += ['--mount','type=bind,src='+mount['source']+',target='+mount['target']+',readonly']
+            for volume in spec.get('volumes', []):
+                args += ['--mount','type=volume,src='+volume['name']+',target='+volume['target']+',readonly,volume-nocopy']
             docker.call(*args,spec['image'])
             item = docker.inspect('container',spec['name'])
         inspect(h,p,item,spec,True)
@@ -99,8 +110,19 @@ def start(h, p, docker, receipt, runtime, config, save):
 
 
 def verify_clients(docker, runtime):
+    verify_volumes(docker, runtime)
     for spec in runtime.get('services', {}).values():
         docker.call('run','--rm','--pull=never','--network=none','--read-only',
                     '--cap-drop=ALL','--security-opt=no-new-privileges',
                     '--user','10001:10001','--entrypoint',spec['client_probe'][0],
                     runtime['images']['agent'],*spec['client_probe'][1:])
+
+
+def verify_volumes(docker, runtime):
+    for spec in runtime.get('services', {}).values():
+        for volume in spec.get('volumes', []):
+            docker.call('run','--rm','--pull=never','--network=none','--read-only',
+                        '--cap-drop=ALL','--security-opt=no-new-privileges','--log-driver=none',
+                        '--user','10001:10001','--mount',
+                        'type=volume,src='+volume['name']+',target='+volume['target']+',readonly,volume-nocopy',
+                        '--entrypoint',volume['probe'][0],volume['helper_image'],*volume['probe'][1:])

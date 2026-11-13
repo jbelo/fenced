@@ -367,11 +367,14 @@ def execute(p, checkout, state, apply=False, action="init"):
     resources = inspect_resources(p, docker, receipt, config, runtime, action in ("start", "stop") or bool(receipt and receipt.get("stopped")))
     plan = {'profile': p, 'images': {**runtime['images'], **{key: value['image'] for key, value in runtime.get('services', {}).items()}}, 'resources': [
         {'kind': k, 'name': n, 'action': 'reuse' if obj else 'create'} for k, n, r, obj in resources],
+        'external_volumes': [{'name': v['name'], 'helper_image': v['helper_image'], 'read_only': True}
+                             for service in runtime.get('services', {}).values() for v in service.get('volumes', [])],
         'managed_files': len(bundle), 'state': str(state), 'extras': extra_checks,
         'note': 'Apply checks volume ownership and managed-file conflicts using isolated helper containers. No image pulls.'}
     if not apply:
         if action == 'launch':
             require(receipt and receipt.get('complete') and not receipt.get('stopped') and not receipt.get('transition'), 'profile is not running; use explicit start')
+            services.verify_volumes(docker, runtime)
             for spec in runtime.get('services', {}).values():
                 services.ready(api(), docker, spec)
         return plan

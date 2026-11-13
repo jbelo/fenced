@@ -4,6 +4,14 @@ Fenced provides coding agents with tools, persistent state, and controlled acces
 to services within an otherwise isolated container environment. Developers choose
 which workspaces, capabilities, and network destinations agents can access.
 
+## Install on a host
+
+Follow [clone-and-setup installation](host/INSTALL.md) for a clean checkout on
+macOS/ARM64 or Ubuntu 26.04 ARM64/AMD64. The checkout's `./fenced` entry point
+loads pinned Nix tools automatically; repositories, profiles, credentials and
+state stay outside the installation. Existing Make targets and launchers remain
+available.
+
 ## What the harness provides
 
 - A Go-oriented base image with development tools and coding-agent CLIs.

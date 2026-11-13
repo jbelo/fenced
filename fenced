@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Checkout entry point: preserve the caller's directory and use pinned host tools.
+set -euo pipefail
+source_path=${BASH_SOURCE[0]}
+while [[ -L "$source_path" ]]; do
+  source_dir=$(cd -P "$(dirname "$source_path")" && pwd)
+  target=$(readlink "$source_path")
+  case "$target" in
+    /*) source_path=$target ;;
+    *) source_path=$source_dir/$target ;;
+  esac
+done
+checkout=$(cd -P "$(dirname "$source_path")" && pwd)
+usage() {
+  cat <<'HELP'
+Usage: fenced COMMAND [ARGS...]
+
+  shell                  Enter the pinned host development shell
+  exec COMMAND [ARGS...]  Run a host command with pinned tools
+  doctor [ARGS...]        Check host readiness without changing it
+  validate|plan|init|launch|start|stop [ARGS...]
+                         Run fenced-harness using this checkout's resources
+
+Profile actions require --profile; plan/init/launch/start/stop also require
+--state-dir. init/start/stop require --apply. Nothing is initialized by shell entry.
+Relative paths resolve from your current directory. See host/INSTALL.md.
+HELP
+}
+command=${1:---help}
+case "$command" in
+  -h|--help|help) usage; exit 0 ;;
+  shell|exec|doctor|validate|plan|init|launch|start|stop) shift ;;
+  *) printf 'Unknown command: %s\n' "$command" >&2; usage >&2; exit 2 ;;
+esac
+if [[ "$command" == exec && $# == 0 ]]; then
+  printf 'exec requires a host command\n' >&2; exit 2
+fi
+if [[ "$command" == shell && $# != 0 ]]; then
+  printf 'shell takes no arguments; use exec to run a command\n' >&2; exit 2
+fi
+if ! command -v nix >/dev/null 2>&1; then
+  for setup in /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh "$HOME/.nix-profile/etc/profile.d/nix.sh"; do
+    if [[ -r "$setup" ]]; then
+      # Nix's own shell setup may reference unset variables.
+      set +u
+      . "$setup"
+      set -u
+      command -v nix >/dev/null 2>&1 && break
+    fi
+  done
+fi
+if ! command -v nix >/dev/null 2>&1; then
+  printf 'Nix is required. Install Nix, then open a new login shell and retry. See host/NIX.md.\n' >&2
+  exit 1
+fi
+[[ -f "$checkout/flake.lock" ]] || { printf 'Missing flake.lock in Fenced checkout\n' >&2; exit 1; }
+nix_args=(--extra-experimental-features 'nix-command flakes' develop --no-update-lock-file "$checkout#host")
+case "$command" in
+  shell) exec nix "${nix_args[@]}" ;;
+  exec) exec nix "${nix_args[@]}" --command "$@" ;;
+  doctor) exec nix "${nix_args[@]}" --command fenced-doctor "$@" ;;
+  validate) exec nix "${nix_args[@]}" --command fenced-harness validate "$@" ;;
+  *) exec nix "${nix_args[@]}" --command fenced-harness "$command" --source "$checkout" "$@" ;;
+esac

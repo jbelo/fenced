@@ -10,7 +10,11 @@ needed to discover and connect to extras.
 
 ## Cross-unit coordination
 
-For gateway integration work, read
+For the GitHub PR diff HTTP 406 investigation, use
+[the task exchange](../exchange/github-pr-diff-406.md) for coordination and append
+replies there. The general exchange retains the earlier handoff as history.
+
+For other gateway integration work, read
 [/Users/jbelo/personal/workspace/sc-agent-gateway/progress/EXCHANGE.md](/Users/jbelo/personal/workspace/sc-agent-gateway/progress/EXCHANGE.md)
 when starting or resuming. Append replies there, preserving earlier entries.
 Name the sending unit, entry answered, exact contract commit, findings or outcome,

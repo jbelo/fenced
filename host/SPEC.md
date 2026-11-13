@@ -157,3 +157,11 @@ initialization/start/stop is resumable; unowned resources and changed enrollment
 require explicit operator action. Credential contents never enter plans, receipts,
 agent homes or images. See the gateway README for exact runtime-file permissions
 and migration limits. This does not imply readiness adapters for other services.
+
+The gateway credential adapter now references a dedicated, externally staged
+Docker volume. Maintained gateway tools own staging and rotation; the host lifecycle
+never creates or deletes credential volumes. Host sources retain operator ownership.
+Read-only helper probes verify gateway UID access, and the service mounts the
+volume read-only. Receipts bind volume identity, not token contents; explicit
+stop/stage/check/start activates rotation without automatic restarts. Direct-host
+credential mounts require migration to a fresh volume-backed profile.

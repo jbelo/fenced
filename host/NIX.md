@@ -1,5 +1,12 @@
 # Use the Nix host shell
 
+For normal operation, use the checkout launcher described in
+[clone-and-setup installation](INSTALL.md): `~/fenced/fenced plan ...`,
+`~/fenced/fenced launch ...`, or `~/fenced/fenced exec story-setup ...`.
+It selects this locked environment automatically. Use `~/fenced/fenced shell`
+when you want an interactive host shell. The explicit Nix commands below are
+also available for development and diagnostics.
+
 Use this shell to develop and run Fenced with a consistent set of host tools.
 It provides Bash, Git, tmux, Neovim (`nvim`), Python, rsync, Make, the Docker client,
 OpenSSH and shell utilities, together with Fenced launchers and extra-owned host

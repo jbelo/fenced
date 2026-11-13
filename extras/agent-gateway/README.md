@@ -179,22 +179,68 @@ The hostname is a network alias; the container name remains profile-specific.
 Supply gateway config/policy matching the delivered gateway schema. Config must
 bind `172.28.240.10:8080` (the chosen internal address), with policy path
 `/etc/agent-gateway/policy.json`. It must not bind all interfaces. In live mode,
-map every configured `/run/secrets/NAME` to a host file in `secrets`, for example
-`"secrets": {"github_token": "/absolute/private-runtime/github_token"}`.
-Only file-based credentials are accepted. Mock mode mounts no secrets, even if
-its example config contains unused token-file references. Readiness checks never
-call providers and do not establish valid provider authentication.
+reference an already staged, dedicated Docker credential volume:
 
-Runtime files must be outside the agent workspace, without symlinks/hard links,
-each directly inside an operator-owned **0700** directory. Config and policy
-must be operator-owned mode **0444**. Credential files must be owned by numeric
-UID **10001**, mode **0400**, as enforced by the gateway. The private directory
-protects the host paths; the gateway reads individual bind-mounted files as UID
-10001. Prepare the private directory before enrolling credentials, and use an
-operator-approved privileged enrollment step for credential ownership. The harness does not chmod, copy, print
-or read credential contents. It records file identity metadata to detect changes;
-config/policy content hashes are recorded. Do not edit enrolled files concurrently.
-Credentials/config/policy are mounted only into the gateway, never the agent.
+```json
+"secrets": {
+  "volume": "my-profile-credentials",
+  "helper_image": "fenced-amd64-all:validation"
+}
+```
+
+The helper must be a trusted local native image with `/bin/sh`, `stat`, `find`,
+`wc` and `cat`. Fenced resolves its immutable image ID. Mock mode uses `secrets: {}`.
+Direct host credential paths are no longer accepted; existing bind-based profiles
+require explicit migration to a fresh profile/state/resource set. Ordinary base
+profiles and the existing local Compose deployment are unaffected.
+
+Use the gateway's maintained `runtime-stage` / `runtime-check` workflow before
+initializing the profile. Host source tokens stay **operator-owned, mode 0400**
+in a private runtime directory. Staging copies them through stdin into a dedicated
+volume labeled `agent-gateway.credentials=true`, with Linux UID/GID 10001 and
+mode 0400; its directory is 10001:10001, mode 0700. No host `chown 10001` is needed.
+Do not select an agent-home/cache volume or an existing unrelated volume.
+
+From the maintained gateway checkout:
+
+```sh
+export RUNTIME_DIR="$HOME/.config/my-profile-gateway"
+export GATEWAY_SECRETS_VOLUME=my-profile-credentials
+export CREDENTIAL_HELPER_IMAGE=fenced-amd64-all:validation
+export DOCKER_CONTEXT=default
+make runtime-stage
+make runtime-check
+```
+
+On a fresh host the verified portable source archive also includes the unchanged
+`scripts/provision-runtime.py` and `scripts/credential_volume.py`. After extracting
+the verified archive into a private operator tooling directory, use
+`python3 scripts/provision-runtime.py stage` and `check` there with the same
+variables. These tools expect `RUNTIME_DIR/config/{config,policy}.json` and
+`RUNTIME_DIR/secrets/` containing exactly the selected providers' source files.
+Prepare the desired provider configuration/policy and enroll credentials privately;
+never supply token values as command arguments or in a host profile.
+
+Profile config/policy paths must be outside the agent workspace, without symlinks
+or hard links, operator-owned mode **0444**, each directly inside an operator-owned
+**0700** directory. Credential source paths do not appear in the profile. The
+adapter checks the external volume's label, driver/options and identity, and
+rejects a missing, unlabeled or incompatible volume without creating/adopting it.
+
+Before init/start/launch, an ephemeral helper mounts the volume read-only, with
+no network, dropped capabilities and Docker logging disabled. As UID 10001 it
+checks the exact filenames, ownership, permissions, type and bounded size, then
+reads/discards bytes without emitting contents. The gateway alone receives the
+persistent `/run/secrets` mount, read-only with copy-up disabled. Interactive agent
+containers receive neither credentials nor server configuration. Plans/receipts
+contain volume metadata and image identities, never tokens or token hashes.
+
+Rotation remains an operator action: stop the profile, use the maintained rotation
+or staging/check tools, then explicitly start it. The same volume and gateway
+container can be reused. Repeated init never restarts a healthy service or stages
+credentials; a running gateway keeps its loaded credentials until stopped/started.
+The receipt tracks volume identity, not credential contents: staging into the same
+volume does not require profile migration, while replacing the volume does.
 
 Use the same `--profile`, `--source` and `--state-dir` for each command:
 
@@ -220,7 +266,28 @@ Containers run with read-only roots, dropped capabilities, no privilege escalati
 forwarding disabled and no published ports. The gateway uses the profile's upstream
 network for provider requests and listens only on the internal network. Stop/start
 rechecks ownership, identity, mounts, topology and configuration. Changed images,
-files or profile settings require explicit migration; no automatic replacement,
-credential rotation, adoption of unrelated containers, or destructive cleanup is
+config/policy files or profile settings require explicit migration; no automatic replacement,
+credential enrollment/rotation, adoption of unrelated containers, or destructive cleanup is
 provided. Retain the original inputs when operating a profile; if they are lost or
 changed, inspect its receipt and arrange operator-led repair.
+
+### Read-only live validation
+
+After explicitly enrolling credentials and initializing a fresh live profile,
+choose an allowed repository and PR. Run the host-side check with that profile's
+Docker context, internal network, gateway container and client image:
+
+```sh
+python3 extras/agent-gateway/scripts/verify-feedback.py \
+  --context default --network my-profile-internal \
+  --gateway my-profile-gateway --image fenced-amd64-all:validation \
+  --repo OWNER/REPOSITORY --number PR_NUMBER \
+  --output /path/to/private-validation-summary.json
+```
+
+This checks repeated feedback reads, pagination and denial of `forbidden/project`
+(which must not be allowed by the selected policy). It creates a temporary client
+on the specified network and removes it afterward. Provider bodies and cursors
+stay in memory; the saved summary contains counts, head/image identities and
+check results. It does not enroll credentials, create policy or start the gateway.
+Omitted options retain the legacy verification defaults.

@@ -2,6 +2,8 @@
 """Read-only live feedback checks; retain provider bodies/cursors only in memory."""
 import argparse
 import json
+import os
+import re
 from pathlib import Path
 import subprocess
 import uuid
@@ -76,38 +78,50 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--image', default='go-agent-all')
     parser.add_argument('--gateway', default='go-agent-gateway')
+    parser.add_argument('--network', default='go-agent-internal-net')
+    parser.add_argument('--repo', default='exoscale/kms')
+    parser.add_argument('--number', type=int, default=566)
+    parser.add_argument('--context', help='explicit local Docker context; otherwise use Docker defaults')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
+    if args.number <= 0 or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', args.repo):
+        parser.error('provide a repository owner/name and positive PR number')
+    if args.repo == 'forbidden/project':
+        parser.error('repository conflicts with the policy-denial fixture')
+    if args.context:
+        os.environ['DOCKER_CONTEXT'] = args.context
     client = 'fenced-feedback-' + uuid.uuid4().hex[:10]
     try:
-        result = docker('run', '-d', '--name', client, '--network', 'go-agent-internal-net',
-                        '--read-only', '--user', '501:20', '--cap-drop=ALL',
+        result = docker('run', '-d', '--name', client, '--network', args.network,
+                        '--read-only', '--user', f'{os.getuid()}:{os.getgid()}', '--cap-drop=ALL',
                         '--security-opt=no-new-privileges', '-e', 'HTTP_PROXY=http://127.0.0.1:1',
                         '-e', 'HTTPS_PROXY=http://127.0.0.1:1', args.image, 'sleep', 'infinity')
         assert result.returncode == 0, 'Client failed to start'
-        first, initial = collect(client, 50)
+        first, initial = collect(client, 50, args.repo, args.number)
         # A failed refresh raises before replacing any complete comparison baseline.
-        second, refreshed = collect(client, 50)
+        second, refreshed = collect(client, 50, args.repo, args.number)
         comparison = {'same_head': initial['head_sha'] == refreshed['head_sha'],
                       'new_records': len(second.keys() - first.keys()),
                       'missing_observations': len(first.keys() - second.keys()),
                       'changed_records': sum(first[k] != second[k] for k in first.keys() & second.keys())}
         # Smaller pages exercise thread fragment merging when the live data permits it.
         small_limit = max(1, min(49, (len(second) + 4) // 5))
-        _, small = collect(client, small_limit)
-        denied = docker('exec', client, 'agentctl', 'github', 'pr', 'feedback', '--repo', 'forbidden/project', '--number', '566')
+        _, small = collect(client, small_limit, args.repo, args.number)
+        denied = docker('exec', client, 'agentctl', 'github', 'pr', 'feedback', '--repo', 'forbidden/project', '--number', str(args.number))
         assert denied.returncode == 4 and json.loads(denied.stdout)['error']['code'] == 'policy_denied'
         sha = docker('exec', client, 'sha256sum', '/usr/local/bin/agentctl').stdout.split()[0]
-        image_id = json.loads(docker('image', 'inspect', args.image).stdout)[0]['Id']
+        image = json.loads(docker('image', 'inspect', args.image).stdout)[0]
+        image_id = image['Id']
         gateway = json.loads(docker('inspect', args.gateway).stdout)[0]
-        report = dict(agent_image=image_id, gateway_image=gateway['Image'], cli_sha256=sha,
+        report = dict(repo=args.repo, number=args.number, network=args.network,
+                      architecture=image['Architecture'], agent_image=image_id, gateway_image=gateway['Image'], cli_sha256=sha,
                       initial=initial, refresh=refreshed, comparison=comparison, smaller_pages=small,
                       policy_denied=True, unusable_ambient_proxy_bypassed=True,
                       limitations=['Live feedback can change during pagination; no atomic snapshot.',
                                    'No feedback was posted/edited to manufacture refresh changes.',
                                    'resolved/outdated are unknown; completeness does not supply those fields.',
-                                   'Live PR 566 has no inline replies in this observation; reply merging requires separate fixture evidence.',
-                                   'AMD64 runtime and unrelated lifecycle gaps are not verified.'])
+                                   'Live data may not exercise inline replies; separate fixture evidence covers reply merging.',
+                                   'This read-only check does not verify credential rotation or other service lifecycles.'])
         args.output.write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps(report, indent=2))
     finally:

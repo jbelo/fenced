@@ -29,6 +29,8 @@ class ServiceProfileTests(unittest.TestCase):
     def test_valid_service_and_legacy_catalog(self):
         self.assertEqual(self.load()['services']['agent-gateway']['config'],str(self.config))
         self.assertEqual(h.capabilities()['story-setup']['kind'],'host-handoff')
+        module=h.services.adapter(h.capabilities()['agent-gateway']['adapter'])
+        self.assertNotIn('volumes',module.describe(self.load()['services']['agent-gateway']))
     def test_selection_and_subnet_must_match(self):
         self.p['extras']=[]
         with self.assertRaises(h.Error):self.load()
@@ -54,31 +56,43 @@ class ServiceProfileTests(unittest.TestCase):
     def test_mock_cannot_mount_credentials(self):
         self.p['services']['agent-gateway']['secrets']={'github_token':str(self.policy)}
         with self.assertRaises(ValueError):self.load()
-    def test_credentials_are_fingerprinted_without_reading_contents(self):
-        token = self.config.parent/'github_token'; token.write_text('never-read-this'); token.chmod(0o400)
-        config = json.loads(self.config.read_text()); config['mode']='live'
+    def live_volume(self):
+        config=json.loads(self.config.read_text());config['mode']='live'
         config['providers']['github']['token_file']='/run/secrets/github_token'
-        self.config.chmod(0o644); self.config.write_text(json.dumps(config)); self.config.chmod(0o444)
-        self.p['services']['agent-gateway']['secrets']={'github_token':str(token)}
-        original_stat, original_read = Path.stat, Path.read_bytes
-        def stat(path, *args, **kwargs):
-            value=original_stat(path,*args,**kwargs)
-            if path == token:
-                fields={key:getattr(value,key) for key in dir(value) if key.startswith('st_')}
-                fields['st_uid']=10001
-                return h.SimpleNamespace(**fields)
-            return value
-        def read(path):
-            if path == token: raise AssertionError('credential contents read')
-            return original_read(path)
+        self.config.chmod(0o644);self.config.write_text(json.dumps(config));self.config.chmod(0o444)
+        self.p['services']['agent-gateway']['secrets']={'volume':'private-credentials','helper_image':'helper:test'}
+        return self.load()
+
+    def test_staged_volume_metadata_and_readonly_probe(self):
         class Docker:
+            calls=[]
             def data(self,*args):
-                return [{'Os':'linux','Architecture':'arm64','Id':'sha256:'+'a'*64,
-                         'Config':{'User':'10001:10001'}}]
-        with patch.object(Path,'stat',stat), patch.object(Path,'read_bytes',read):
-            result=h.services.prepare(h,self.load(),Docker(),h.capabilities())
+                return [{'Os':'linux','Architecture':'arm64','Id':'sha256:'+'a'*64,'Config':{'User':'10001:10001'}}]
+            def inspect(self,*args):
+                return {'Name':'private-credentials','Driver':'local','Labels':{'agent-gateway.credentials':'true'},'CreatedAt':'stable'}
+            def call(self,*args):self.calls.append(args)
+        docker=Docker();result=h.services.prepare(h,self.live_volume(),docker,h.capabilities())
+        self.assertEqual(len(result['agent-gateway']['files']),2)
+        self.assertEqual(result['agent-gateway']['volumes'][0]['identity']['CreatedAt'],'stable')
+        h.services.verify_volumes(docker,{'services':result})
+        self.assertIn('--network=none',docker.calls[0]);self.assertIn('--log-driver=none',docker.calls[0])
+        self.assertTrue(any('readonly,volume-nocopy' in arg for arg in docker.calls[0]))
         self.assertNotIn('never-read-this',json.dumps(result))
-        self.assertIsNone(result['agent-gateway']['files'][-1]['sha256'])
+
+    def test_unlabeled_external_volume_rejected_before_probe(self):
+        class Docker:
+            def data(self,*args):return [{'Os':'linux','Architecture':'arm64','Id':'sha256:'+'a'*64,'Config':{'User':'10001:10001'}}]
+            def inspect(self,*args):return {'Driver':'local','Labels':{}}
+        with self.assertRaisesRegex(h.Error,'externally staged'):
+            h.services.prepare(h,self.live_volume(),Docker(),h.capabilities())
+
+    def test_agent_home_cannot_be_used_for_credentials(self):
+        self.live_volume();self.p['services']['agent-gateway']['secrets']['volume']='home'
+        with self.assertRaises(ValueError):self.load()
+
+    def test_direct_host_secret_paths_are_rejected(self):
+        self.live_volume();self.p['services']['agent-gateway']['secrets']={'github_token':'/private/token'}
+        with self.assertRaisesRegex(ValueError,'staged volume'):self.load()
 
     def test_service_image_mismatch_fails_preparation(self):
         class Docker:

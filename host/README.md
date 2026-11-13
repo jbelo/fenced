@@ -1,5 +1,10 @@
 # Prepare and check a host
 
+Start with [clone-and-setup installation](INSTALL.md) for the end-to-end workflow.
+The checkout entry point automatically selects Nix tools: use `./fenced doctor`,
+`./fenced init`, `./fenced launch`, or `./fenced exec COMMAND`. Lower-level commands
+below remain available from `./fenced shell`.
+
 Use these commands on the machine that runs Docker: your Mac, or inside an
 Ubuntu 26.04 ARM64/AMD64 VM. They prepare/check host prerequisites only. They do
 not initialize the agent harness themselves. Profile initialization is described
@@ -79,8 +84,10 @@ inside the disposable VM, never against the existing Mac harness.
 `fenced-harness` provides `validate`, `plan`, `init --apply`, `launch`, and explicit
 `start --apply` / `stop --apply` for receipt-owned service containers.
 Supply `--profile /path/to/profile.json` using the fields in [SPEC.md](SPEC.md).
-For plan, init and launch, also supply `--source /path/to/fenced` and
+When invoking `fenced-harness` directly, for plan, init and launch also supply
+`--source /path/to/fenced` and
 `--state-dir /path/to/private-state`; the state directory's parent must exist.
+The checkout launcher `./fenced` supplies `--source` automatically.
 Use unique resource names and `extras: []` for the base harness, or
 `"extras": ["story-setup"]` to check the host Git/tmux handoff prerequisites.
 The `agent-gateway` extra also has a service adapter; see its
