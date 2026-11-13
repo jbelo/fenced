@@ -78,61 +78,82 @@ be unused. For the combined development image and gateway, follow the
 native images can be referenced by immutable image ID; rebuilding is not required
 for every profile. No image is pulled or service replaced by this launcher itself.
 
-Create `~/.config/fenced/development.json` using the [profile fields](SPEC.md#setup-inputs).
-Set its workspace root to the absolute path of `~/workspace`, writable paths to
-`["stories"]`, and use unique development container/network/volume names. Select
-`story-setup` for review setup and `agent-gateway` for provider reads. The latter also
-requires its extra-owned service configuration and separately enrolled credentials;
-see [gateway profile setup](../extras/agent-gateway/README.md#host-profile-lifecycle).
-Do not store secret values in the profile. JSON does not expand `~` or `$HOME`.
+## Configure once
 
-Use a new profile and state directory instead of editing an initialized validation
-profile. Existing receipts bind their profile and resource identities. Do not reuse
-validation container/network/agent-home names in the new profile. An existing
-operator-staged credential volume can be referenced according to the gateway guide.
-
-## Set up and launch
-
-Review the plan first:
+For a fresh base/story environment, specify the workspace and desired capabilities:
 
 ```sh
-"$HOME/fenced/fenced" plan \
-  --profile "$HOME/.config/fenced/development.json" \
-  --state-dir "$HOME/.local/state/fenced/development"
+~/fenced/fenced configure --workspace "$HOME/workspace" --extra story-setup \
+  --image fenced-agent:local --proxy-image fenced-proxy:local
 ```
 
-Then initialize with one explicit setup command:
+Images must already exist. Omit image flags to use the legacy local names
+`go-agent-all` and `go-agent-egress-proxy-image`. The default Docker context is the
+current context; use `--context` to choose another local one. Configuration detects
+the host platform, generates distinct Docker names, and lets Docker allocate the
+base internal network subnet. It does not start services or pull images.
+
+Your choices are recorded in `~/.config/fenced/settings.json`; the generated
+infrastructure profile and ownership records stay under `~/.local/state/fenced/`.
+Do not edit generated state. Reconfiguration of an existing environment remains
+an explicit migration: `configure` refuses to overwrite it and changed settings
+are rejected rather than silently recreating resources.
+
+Service extras such as the gateway still require their separately enrolled
+configuration, policy and credentials. See the [gateway setup guide](../extras/agent-gateway/README.md#host-profile-lifecycle)
+for that one-time operator setup; `configure --extra agent-gateway` does not invent
+or enroll those settings. Existing `~/.config/fenced/development.json` profiles,
+including an enrolled gateway, are used automatically without rewriting their
+receipts or moving resources. This supports the already initialized development
+VM. The simplified interface does not migrate legacy Mac environments automatically.
+
+## Everyday commands
 
 ```sh
-"$HOME/fenced/fenced" init --apply \
-  --profile "$HOME/.config/fenced/development.json" \
-  --state-dir "$HOME/.local/state/fenced/development"
+~/fenced/fenced plan       # Read-only checks
+~/fenced/fenced init       # Initialize and start supporting services
+~/fenced/fenced meta       # Open the workspace-level agent container
+~/fenced/fenced story "$HOME/workspace/stories/rv-example"
+~/fenced/fenced stop       # Stop supporting services; retain data
+~/fenced/fenced start      # Restart supporting services
 ```
 
-Launch from any host directory:
+`story` defaults to the current directory, which must be below `workspace/stories`.
+Only the selected directory is writable in that session; the rest of the workspace
+remains read-only. `meta` has the configured writable workspace subdirectories.
+Both use the same environment's image, networks, home and cache. Add `--no-tmux`
+for a plain container shell. `launch` remains an alias for `meta`.
+
+No manual Nix shell, profile/state arguments or `--apply` is needed for these
+commands. `init`, `start` and `stop` already express intent; `plan` never changes
+resources. The lower-level `fenced-harness` command retains `--apply` for existing
+automation, and the checkout launcher supplies it. Initial configuration never
+happens implicitly during a launch. Starting a container does not log in a coding
+agent, start a code review or install private templates.
+
+Advanced users can select another environment explicitly:
 
 ```sh
-"$HOME/fenced/fenced" launch \
-  --profile "$HOME/.config/fenced/development.json" \
-  --state-dir "$HOME/.local/state/fenced/development"
+~/fenced/fenced meta --profile /path/to/profile.json --state-dir /path/to/state
 ```
 
-No manual Nix shell or `--source` argument is needed. Initialization retains its
-existing ownership/conflict checks; this entry point does not migrate old profiles.
-To stop/start receipt-owned services, replace `launch` with `stop --apply` or
-`start --apply`. Closing an agent session is separate from stopping services.
+An explicit profile requires its state directory; it never defaults to development
+state. The [profile schema](SPEC.md#setup-inputs) remains supported for custom
+images, service enrollment and multiple isolated environments. Existing ownership,
+conflict, mount and credential checks still apply.
 
-For a review, provide the agent with the Shortcut story and PR references. Review
-its generated request and run the returned host-side command through the launcher:
+For a review, give meta the Shortcut story and PR references. The setup skills
+also require the private workspace template and the requested host tmux session;
+these remain separately prepared prerequisites. Review its generated request and
+run the returned host-side command through the launcher:
 
 ```sh
-"$HOME/fenced/fenced" exec story-setup apply /absolute/path/to/request.json \
+~/fenced/fenced exec story-setup apply /absolute/path/to/request.json \
   --workspace-root "$HOME/workspace"
 ```
 
-The requested host tmux session must already exist. Host Git credentials and any
-private templates are separately enrolled prerequisites. Follow the
-[story-setup guide](../extras/story-setup/README.md) for request review and handoff.
+Follow the [story-setup guide](../extras/story-setup/README.md) for request review
+and handoff. After host setup completes, use `fenced story` at the story directory.
 Gateway feedback access does not require a successful full aggregate PR diff;
 compute full diffs from the local Git repository when needed.
 

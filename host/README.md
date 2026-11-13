@@ -2,7 +2,7 @@
 
 Start with [clone-and-setup installation](INSTALL.md) for the end-to-end workflow.
 The checkout entry point automatically selects Nix tools: use `./fenced doctor`,
-`./fenced init`, `./fenced launch`, or `./fenced exec COMMAND`. Lower-level commands
+`./fenced init`, `./fenced meta`, `./fenced story`, or `./fenced exec COMMAND`. Lower-level commands
 below remain available from `./fenced shell`.
 
 Use these commands on the machine that runs Docker: your Mac, or inside an
@@ -87,7 +87,9 @@ Supply `--profile /path/to/profile.json` using the fields in [SPEC.md](SPEC.md).
 When invoking `fenced-harness` directly, for plan, init and launch also supply
 `--source /path/to/fenced` and
 `--state-dir /path/to/private-state`; the state directory's parent must exist.
-The checkout launcher `./fenced` supplies `--source` automatically.
+The checkout launcher `./fenced` supplies `--source` automatically, defaults to
+the configured development environment, and supplies `--apply` for init/start/stop.
+Use `./fenced configure --workspace PATH` for a new base environment; see INSTALL.md.
 Use unique resource names and `extras: []` for the base harness, or
 `"extras": ["story-setup"]` to check the host Git/tmux handoff prerequisites.
 The `agent-gateway` extra also has a service adapter; see its

@@ -15,21 +15,29 @@ usage() {
   cat <<'HELP'
 Usage: fenced COMMAND [ARGS...]
 
-  shell                  Enter the pinned host development shell
+  configure --workspace PATH [--extra story-setup] [--image IMAGE]
+                         Configure a fresh default environment
+  plan                   Inspect the environment without changes
+  init                   Initialize its resources and start services
+  start|stop             Start or stop supporting services
+  meta                   Enter the workspace-level agent container
+  story [DIRECTORY]      Enter one story (default: current directory)
+  launch                 Alias for meta
+  shell                  Enter the pinned host tool shell
   exec COMMAND [ARGS...]  Run a host command with pinned tools
-  doctor [ARGS...]        Check host readiness without changing it
-  validate|plan|init|launch|start|stop [ARGS...]
-                         Run fenced-harness using this checkout's resources
+  doctor [ARGS...]        Check host readiness
+  validate               Validate environment configuration
 
-Profile actions require --profile; plan/init/launch/start/stop also require
---state-dir. init/start/stop require --apply. Nothing is initialized by shell entry.
-Relative paths resolve from your current directory. See host/INSTALL.md.
+Normal commands use your configured development environment. Advanced overrides:
+--profile PATH --state-dir PATH (supply both). init/start/stop express consent to
+change resources; plan never applies changes. See host/INSTALL.md.
+
 HELP
 }
 command=${1:---help}
 case "$command" in
   -h|--help|help) usage; exit 0 ;;
-  shell|exec|doctor|validate|plan|init|launch|start|stop) shift ;;
+  configure|shell|exec|doctor|validate|plan|init|launch|meta|story|start|stop) shift ;;
   *) printf 'Unknown command: %s\n' "$command" >&2; usage >&2; exit 2 ;;
 esac
 if [[ "$command" == exec && $# == 0 ]]; then
@@ -56,9 +64,19 @@ fi
 [[ -f "$checkout/flake.lock" ]] || { printf 'Missing flake.lock in Fenced checkout\n' >&2; exit 1; }
 nix_args=(--extra-experimental-features 'nix-command flakes' develop --no-update-lock-file "$checkout#host")
 case "$command" in
-  shell) exec nix "${nix_args[@]}" ;;
+  shell) export PATH="$checkout:$PATH"; exec nix "${nix_args[@]}" ;;
   exec) exec nix "${nix_args[@]}" --command "$@" ;;
   doctor) exec nix "${nix_args[@]}" --command fenced-doctor "$@" ;;
+  meta|launch) exec nix "${nix_args[@]}" --command fenced-harness launch --source "$checkout" "$@" ;;
+  story)
+    story_args=()
+    if [[ $# -gt 0 && "$1" != -* ]]; then
+      story_args=(--start-dir "$1")
+      shift
+    fi
+    exec nix "${nix_args[@]}" --command fenced-harness launch --source "$checkout" --session-kind story "${story_args[@]}" "$@"
+    ;;
+  init|start|stop) exec nix "${nix_args[@]}" --command fenced-harness "$command" --source "$checkout" --apply "$@" ;;
   validate) exec nix "${nix_args[@]}" --command fenced-harness validate "$@" ;;
   *) exec nix "${nix_args[@]}" --command fenced-harness "$command" --source "$checkout" "$@" ;;
 esac

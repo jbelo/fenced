@@ -65,6 +65,16 @@ class EntrypointTests(unittest.TestCase):
         validate = json.loads(self.run_entry('validate', '--profile', 'p.json').stdout)['args']
         self.assertEqual(validate[-4:], ['fenced-harness', 'validate', '--profile', 'p.json'])
 
+    def test_normal_commands_select_actions_without_requiring_apply(self):
+        for action in ('init', 'start', 'stop'):
+            r = self.run_entry(action)
+            args = json.loads(r.stdout)['args']
+            self.assertEqual(args[-5:], ['fenced-harness', action, '--source', str(self.checkout.resolve()), '--apply'])
+        args = json.loads(self.run_entry('meta').stdout)['args']
+        self.assertEqual(args[-4:], ['fenced-harness', 'launch', '--source', str(self.checkout.resolve())])
+        args = json.loads(self.run_entry('story', 'stories/a b', '--no-tmux').stdout)['args']
+        self.assertEqual(args[-5:], ['--session-kind', 'story', '--start-dir', 'stories/a b', '--no-tmux'])
+
 
 if __name__ == '__main__':
     unittest.main()

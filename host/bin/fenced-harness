@@ -480,16 +480,141 @@ def execute(p, checkout, state, apply=False, action="init"):
     return {**plan, 'applied': True, 'receipt': str(receipt_path)}
 
 
+def default_locations():
+    home = Path.home()
+    return (home / '.config/fenced', home / '.local/state/fenced')
+
+
+def configured_profile():
+    config, state = default_locations()
+    legacy = config / 'development.json'
+    managed = state / 'development-profile.json'
+    require(not (legacy.exists() and managed.exists()),
+            'multiple default environments; select --profile and --state-dir explicitly')
+    if legacy.exists():
+        return legacy
+    require(managed.exists(), 'no environment configured; run fenced configure --workspace PATH first')
+    settings = read_json(config / 'settings.json')
+    profile = read_json(managed)
+    require(settings == user_settings(profile),
+            'settings changed; initialized environments require explicit migration, not in-place edits')
+    return managed
+
+
+def user_settings(p):
+    return {'workspace': p['workspace']['root'], 'image': p['image']['reference'],
+            'proxy_image': p['proxy']['image'], 'context': p['runtime']['context'],
+            'extras': p['extras']}
+
+
+def configure(args):
+    config, storage = default_locations()
+    require(not args.profile and not args.state_dir, 'configure manages the default environment; use explicit profiles for other environments')
+    require(args.workspace, 'configure requires --workspace PATH')
+    require(not any(p.exists() or p.is_symlink() for p in
+                    (config / 'development.json', config / 'settings.json',
+                     storage / 'development-profile.json', storage / 'development')),
+            'default environment already exists; use it or perform an explicit migration')
+    root = path(args.workspace)
+    require((root / 'stories').is_dir(), 'create the workspace stories directory before configuring')
+    extras = args.extra or []
+    catalog = capabilities()
+    require(len(set(extras)) == len(extras), 'duplicate extra')
+    require(all(e in catalog and catalog[e]['kind'] == 'host-handoff' for e in extras),
+            'service extras require separately enrolled service configuration; use an explicit service profile')
+    context = args.context or run(['docker', 'context', 'show'])
+    prefix = 'fenced-' + uuid.uuid4().hex[:10]
+    p = {'version': 1, 'platform': host_platform(), 'runtime': {'context': context},
+         'workspace': {'root': str(root), 'writable': ['stories']},
+         'image': {'reference': args.image or 'go-agent-all'},
+         'state': {'agenthome': prefix + '-home', 'gomodcache': prefix + '-go'},
+         'network': {'internal': prefix + '-internal', 'upstream': prefix + '-upstream'},
+         'proxy': {'image': args.proxy_image or 'go-agent-egress-proxy-image', 'container': prefix + '-proxy'},
+         'extras': extras}
+    # Validate before saving, without enrolling credentials or contacting Docker's daemon.
+    name(context, 'context')
+    for image in (p['image']['reference'], p['proxy']['image']):
+        require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._/:@-]*', image), 'invalid image reference')
+    for directory in (config, storage):
+        require(not directory.is_symlink() and directory.resolve() == directory.absolute(),
+                'configuration/state directory must not contain symlinks')
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        require(directory.stat().st_uid == os.getuid() and directory.stat().st_mode & 0o077 == 0,
+                'configuration/state directory must be private and operator-owned')
+    # Exclusive writes: never overwrite an existing environment, including dangling links.
+    for destination, data in ((storage / 'development-profile.json', p),
+                              (config / 'settings.json', user_settings(p))):
+        fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(data, stream, indent=2)
+            stream.write('\n')
+    return {'configured': True, 'settings': str(config / 'settings.json'),
+            'next': 'fenced plan, then fenced init', 'workspace': str(root)}
+
+
+def launch_command(p, args, images):
+    story = args.session_kind == 'story'
+    filename = 'story-shell' if story else 'meta-shell'
+    launcher = Path(__file__).resolve().parent / filename
+    if not launcher.exists():
+        launcher = Path(args.source).resolve() / 'bin' / filename
+    command = [str(launcher), '--workspace-root', p['workspace']['root'],
+               '--workspace-readonly', '--image', images['agent']]
+    if story:
+        start = path(args.start_dir or os.getcwd())
+        root = Path(p['workspace']['root'])
+        # Select a story beneath the writable stories tree, never the tree itself.
+        require(root / 'stories' in start.parents, 'story directory must be below the workspace stories directory')
+        require(any(start == root / w or root / w in start.parents for w in p['workspace']['writable']),
+                'story directory is not within an allowed writable path')
+        command += ['--workspace-rw', str(start)]
+        if args.no_tmux:
+            command += ['--no-tmux']
+        command += [str(start)]
+    else:
+        require(not args.start_dir, '--start-dir is only valid for story sessions')
+        for writable in p['workspace']['writable']:
+            command += ['--workspace-rw', writable]
+        if args.no_tmux:
+            command += ['--no-tmux']
+    return command
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['validate', 'plan', 'init', 'launch', 'start', 'stop'])
-    parser.add_argument('--profile', required=True)
+    parser.add_argument('action', choices=['configure', 'validate', 'plan', 'init', 'launch', 'start', 'stop'])
+    parser.add_argument('--profile', help='advanced profile override; requires its own --state-dir')
+    parser.add_argument('--workspace', help='configure: host workspace containing stories/')
+    parser.add_argument('--image', help='configure: existing local agent image')
+    parser.add_argument('--proxy-image', help='configure: existing local proxy image')
+    parser.add_argument('--context', help='configure: local Docker context (default: current context)')
+    parser.add_argument('--extra', action='append', help='configure: optional host capability, e.g. story-setup')
+    parser.add_argument('--session-kind', choices=['meta', 'story'], default='meta')
+    parser.add_argument('--start-dir', help='story directory; defaults to current directory')
+    parser.add_argument('--no-tmux', action='store_true', help='launch a plain container shell')
     parser.add_argument('--source', help='Fenced checkout containing reference manifests and squid.conf')
     parser.add_argument('--state-dir', help='new private host directory for receipt and proxy config; parent must exist')
     parser.add_argument('--apply', action='store_true', help='required with init/start/stop; plan is read-only')
     args = parser.parse_args(argv)
     try:
+        if args.action == 'configure':
+            require(not args.apply, 'configure does not accept --apply')
+            print(json.dumps(configure(args), indent=2))
+            return 0
+        require(not any((args.workspace, args.image, args.proxy_image, args.context, args.extra)),
+                'workspace/image/context/extra options belong to configure')
+        require(args.action == 'launch' or not (args.start_dir or args.no_tmux or args.session_kind != 'meta'),
+                'session options are only valid for launch')
+        if args.profile:
+            require(args.action == 'validate' or args.state_dir,
+                    'an explicit --profile requires --state-dir; default state is never reused')
+        else:
+            args.profile = str(configured_profile())
+            args.state_dir = args.state_dir or str(default_locations()[1] / 'development')
         p = load_profile(args.profile)
+        if args.action == 'launch':
+            # Validate story mount boundaries before any helper/container action.
+            launch_command(p, args, {'agent': p['image']['reference']})
         require(not args.apply or args.action in ('init','start','stop'), '--apply is only valid with init/start/stop')
         if args.action == 'validate':
             result = {'valid': True, 'profile': p}
@@ -504,20 +629,14 @@ def main(argv=None):
             receipt = read_json(state / 'receipt.json')
             require(receipt.get('complete') and all(v['action'] == 'reuse' for v in result['resources']),
                     'initialize the profile before launching')
-            launcher = Path(__file__).resolve().parent / 'meta-shell'
-            if not launcher.exists():
-                launcher = Path(args.source).resolve() / 'bin/meta-shell'
             env = {k: v for k, v in os.environ.items() if k in
                    ('PATH', 'HOME', 'USER', 'LOGNAME', 'TERM', 'COLORTERM', 'LANG', 'LC_ALL', 'TMPDIR')}
             env.update({'DOCKER_CONTEXT': p['runtime']['context'], 'AGENTHOME': p['state']['agenthome'],
                         'GOMODCACHE': p['state']['gomodcache'], 'AGENT_INTERNAL_NETWORK': p['network']['internal'],
                         'EGRESS_PROXY_ENABLE': '1', 'EGRESS_PROXY_URL': 'http://' + p['proxy']['container'] + ':3128',
                         'NO_PROXY': 'localhost,127.0.0.1', 'MEMTY_ENABLE': '0', 'WORKSPACE_RW_ENABLE': 'false'})
-            command = [str(launcher), '--workspace-root', p['workspace']['root'], '--workspace-readonly',
-                       '--image', result['images']['agent']]
-            for writable in p['workspace']['writable']:
-                command += ['--workspace-rw', writable]
-            os.execve(launcher, command, env)
+            command = launch_command(p, args, result['images'])
+            os.execve(command[0], command, env)
         print(json.dumps(result, indent=2))
         return 0
     except (Error, OSError, ValueError, KeyError, TypeError) as exc:

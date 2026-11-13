@@ -172,5 +172,92 @@ class SeedTests(unittest.TestCase):
         self.assertEqual(self.seed({'context': 'next'}).returncode, 0)
 
 
+
+class EverydayInterfaceTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = Path(self.tmp.name).resolve()
+        self.workspace = self.home / 'workspace'
+        (self.workspace / 'stories/rv-example').mkdir(parents=True)
+        self.home_patch = patch.object(h.Path, 'home', return_value=self.home)
+        self.home_patch.start()
+        self.addCleanup(self.home_patch.stop)
+
+    def args(self, **kw):
+        from argparse import Namespace
+        values = dict(profile=None, state_dir=None, workspace=str(self.workspace),
+                      extra=['story-setup'], context='default', image='agent:test',
+                      proxy_image='proxy:test')
+        values.update(kw)
+        return Namespace(**values)
+
+    def test_configure_derives_infrastructure_without_docker_mutation(self):
+        with patch.object(h, 'host_platform', return_value='ubuntu-26.04-amd64'), patch.object(h, 'run') as run:
+            h.configure(self.args())
+            run.assert_not_called()
+        filename = h.configured_profile()
+        p = h.load_profile(filename)
+        self.assertEqual(p['platform'], 'ubuntu-26.04-amd64')
+        self.assertEqual(p['workspace']['root'], str(self.workspace))
+        self.assertEqual(p['extras'], ['story-setup'])
+        self.assertNotEqual(p['network']['internal'], p['network']['upstream'])
+        settings = json.loads((self.home / '.config/fenced/settings.json').read_text())
+        self.assertNotIn('platform', settings)
+        self.assertNotIn('network', settings)
+        self.assertNotIn('state', settings)
+        before = filename.read_bytes()
+        with self.assertRaises(h.Error):
+            h.configure(self.args())
+        self.assertEqual(filename.read_bytes(), before)
+
+    def test_existing_development_profile_is_used_without_rewriting(self):
+        p = self.home / '.config/fenced/development.json'
+        p.parent.mkdir(parents=True)
+        p.write_text('{"existing":true}')
+        self.assertEqual(h.configured_profile(), p)
+        self.assertEqual(p.read_text(), '{"existing":true}')
+        self.assertFalse((self.home / '.local/state/fenced').exists())
+
+    def test_custom_profile_never_defaults_to_development_state(self):
+        with patch.object(h, 'load_profile') as load, contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(h.main(['plan', '--profile', '/custom.json', '--source', '/source']), 1)
+            load.assert_not_called()
+
+    def test_modified_settings_require_explicit_migration(self):
+        with patch.object(h, 'host_platform', return_value='ubuntu-26.04-amd64'):
+            h.configure(self.args())
+        settings = self.home / '.config/fenced/settings.json'
+        data = json.loads(settings.read_text());data['image'] = 'other:test'
+        settings.write_text(json.dumps(data))
+        with self.assertRaises(h.Error):
+            h.configured_profile()
+
+    def test_unenrolled_service_cannot_be_selected_as_host_capability(self):
+        with self.assertRaises(h.Error):
+            h.configure(self.args(extra=['agent-gateway']))
+        self.assertFalse((self.home / '.config/fenced/settings.json').exists())
+
+    def test_story_mount_is_only_the_selected_story_and_blocks_escapes(self):
+        from argparse import Namespace
+        p = {'workspace': {'root': str(self.workspace), 'writable': ['stories']}}
+        story = self.workspace / 'stories/rv-example'
+        args = Namespace(source=str(Path(__file__).resolve().parents[2]),
+                         session_kind='story', start_dir=str(story), no_tmux=True)
+        command = h.launch_command(p, args, {'agent': 'sha256:abc'})
+        self.assertTrue(command[0].endswith('/story-shell'))
+        self.assertEqual(command[command.index('--workspace-rw') + 1], str(story))
+        self.assertEqual(command[-1], str(story))
+        self.assertIn('--no-tmux', command)
+        for start in (self.workspace, self.workspace / 'stories', self.home):
+            args.start_dir = str(start)
+            with self.assertRaises(h.Error):
+                h.launch_command(p, args, {'agent': 'sha256:abc'})
+        (self.workspace / 'stories/escape').symlink_to(self.home, target_is_directory=True)
+        args.start_dir = str(self.workspace / 'stories/escape')
+        with self.assertRaises(h.Error):
+            h.launch_command(p, args, {'agent': 'sha256:abc'})
+
+
 if __name__ == '__main__':
     unittest.main()

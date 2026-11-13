@@ -2,7 +2,7 @@
 
 For normal operation, use the checkout launcher described in
 [clone-and-setup installation](INSTALL.md): `~/fenced/fenced plan ...`,
-`~/fenced/fenced launch ...`, or `~/fenced/fenced exec story-setup ...`.
+`~/fenced/fenced meta`, or `~/fenced/fenced exec story-setup ...`.
 It selects this locked environment automatically. Use `~/fenced/fenced shell`
 when you want an interactive host shell. The explicit Nix commands below are
 also available for development and diagnostics.
