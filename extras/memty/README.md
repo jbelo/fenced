@@ -7,6 +7,29 @@ The extra owns a launch hook; `make install` installs it alongside the launchers
 Set `MEMTY_ENABLE=0` to disable the mount. If the default source is missing, the
 launcher warns and continues. An explicitly supplied invalid `MEMTY_SOURCE` fails.
 
+## Profile-aware launchers
+
+Select the host directory once, outside the container:
+
+```sh
+~/fenced/fenced template "$HOME/memty"          # VM
+~/fenced/fenced template "$HOME/personal/memty" # Mac: use its actual host path
+```
+
+These are alternatives for their respective hosts. The selected path is stored in
+`~/.config/fenced/memty.json`, outside profile receipts and Nix. It must contain
+readable `AGENTS.md` and `brief/STORY_TEMPLATE.md`. No template contents are copied.
+`fenced template` shows the setting; `fenced template --off` disables it for new
+sessions. A stale/invalid configured path fails launch rather than silently omitting
+the required template. With no setting, profile launches do not mount a template.
+
+New `fenced meta` and `fenced story` sessions mount the selected source read-only at
+`/home/agent/memty`, regardless of the host path. Relaunch an existing session to
+receive a changed mount. No image rebuild, service restart or profile migration is
+needed. This setting applies to profile launches on this host; it does not change
+legacy launcher defaults described below. Any previous home-volume template is
+hidden by the mount, not deleted. Keep private template content out of Git/Nix.
+
 ## Install and use
 
 Install the standard harness launchers and their extra hooks:

@@ -28,7 +28,7 @@ existing agent homes.
 - [Agent gateway](agent-gateway/README.md): ARM64 `agentctl` for live read-only GitHub/Shortcut access and PR feedback, protected client configuration and gateway usage skill.
 - [Cassandra](cassandra/README.md): persistent database service, lifecycle, and readiness checks.
 - [OpenBao](openbao/README.md): disposable OpenBao 2.7.1 HTTP/TLS services, agent trust/credentials, TokenReview callback routing and optional `bao` CLI.
-- [Memty](memty/README.md): read-only template at `$HOME/memty` through the standard shell launchers.
+- [Memty](memty/README.md): configurable host template mounted read-only at `$HOME/memty` in meta/story sessions.
 - [Public API agent tooling](agent-public-api/README.md): Java 25, Clojure CLI, host-prepared repo-local dependency caches and offline resolution checks.
 - [Public API runtime agent extension](agent-public-api-runtime/README.md): Java 25 only, for running host-built Public API uberjars from the shared checkout.
   Its [local host setup guide](agent-public-api-runtime/SETUP.md) covers schemas, fixed local test credentials, certificates, and build/run steps.

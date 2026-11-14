@@ -634,7 +634,7 @@ def main(argv=None):
             env.update({'DOCKER_CONTEXT': p['runtime']['context'], 'AGENTHOME': p['state']['agenthome'],
                         'GOMODCACHE': p['state']['gomodcache'], 'AGENT_INTERNAL_NETWORK': p['network']['internal'],
                         'EGRESS_PROXY_ENABLE': '1', 'EGRESS_PROXY_URL': 'http://' + p['proxy']['container'] + ':3128',
-                        'NO_PROXY': 'localhost,127.0.0.1', 'MEMTY_ENABLE': '0', 'WORKSPACE_RW_ENABLE': 'false'})
+                        'NO_PROXY': 'localhost,127.0.0.1', 'FENCED_PROFILE_LAUNCH': '1', 'FENCED_HOST_CHECKOUT': str(Path(args.source).resolve()), 'WORKSPACE_RW_ENABLE': 'false'})
             command = launch_command(p, args, result['images'])
             os.execve(command[0], command, env)
         print(json.dumps(result, indent=2))

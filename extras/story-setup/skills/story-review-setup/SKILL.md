@@ -6,7 +6,8 @@ description: Prepare an Exoscale review workspace in meta-shell, with a complete
 # Container review setup
 
 This procedure runs in meta-shell: workspace root `/workspace`, template
-`$HOME/memty`. Host tmux is managed by story-setup, not the container. It does not use host short/gh/new-sc/new-rv/gw-add.
+`$HOME/memty`. Before creating a workspace, require readable template `AGENTS.md`
+and `brief/STORY_TEMPLATE.md`; report a missing template to the operator. Host tmux is managed by story-setup, not the container. It does not use host short/gh/new-sc/new-rv/gw-add.
 The gateway and its installed agent-gateway skill supply read-only metadata.
 Report unavailable targets, tools or services; never bypass gateway policy or ask
 for provider credentials in the agent. Current GitHub scope is exoscale/kms.
@@ -104,26 +105,31 @@ in JSON.
 
 ## Host handoff: give the exact command
 
-`story-setup` is a host-only executable, installed at `~/.local/bin/story-setup`
-on the host. It is intentionally absent from the agent. Do not run `command -v`,
-search container directories for it, or infer its syntax. Its interface is
-`story-setup apply REQUEST` and `story-setup window REQUEST [--session NAME --window NAME]`.
-The action (`apply` or `window`) is required.
+`story-setup` is host-only and intentionally absent from the agent. Do not search
+for it inside the container. The interface is `story-setup apply REQUEST` or
+`story-setup window REQUEST [--session NAME --window NAME]`; the action is required.
 
-After writing the request, present a copyable **host-terminal** command with the
-actual workspace and request filename substituted, not just a path. For the default
-host root `~/exoscale`, use this shape (the host shell expands `$HOME`):
+Read `FENCED_HOST_WORKSPACE` and `FENCED_HOST_CHECKOUT` from the session environment.
+The first maps `/workspace` to its host directory. When both are provided, give a
+copyable host-terminal command using the checkout launcher:
 
 ```sh
-story-setup apply "$HOME/exoscale/stories/rv-123-example/setup.json"
+"/host/fenced/fenced" exec story-setup apply \
+  "/host/workspace/stories/rv-123-example/setup.json" \
+  --workspace-root "/host/workspace"
 ```
 
-This works from any host working directory. Never substitute the container's
-`/home/agent` or `/workspace` into the host command. For a custom mount, use the known
-host root in both the absolute request path and `--workspace-root HOST_ROOT`; ask
-for that mapping only if unknown. Shell-quote paths as literal arguments. If the
-host reports command not found, try the same command using `"$HOME/.local/bin/story-setup"`
-as the executable; report a missing host installation rather than searching the agent.
+Replace every illustrative host path with the actual metadata and request filename.
+Shell-quote each literal argument. Do not use the container's `$HOME`, `/home/agent`
+or `/workspace` as a host path. Do not assume `~/exoscale` or `~/workspace` on the
+host. If mapping metadata is absent in a legacy session, ask for the host workspace
+mapping; use `story-setup apply` directly when the operator confirms it is available
+in their host environment. Never infer that the helper is installed at ~/.local/bin.
+
+For every handoff, include `--workspace-root` explicitly. When the checkout path is
+known, also use its `fenced exec` prefix for window-only retries and migrations.
+If a host command is unavailable, report that to the operator; do not search for
+host executables or acquire host credentials inside the agent container.
 
 State that setup is pending host execution and identify the exact expected receipt
 at `<request-filename>.result.json` beside the request. On completion, read and
@@ -136,7 +142,9 @@ For an older completed Git-only request, present the migration command with actu
 selected names, for example:
 
 ```sh
-story-setup window "$HOME/exoscale/stories/rv-123-example/setup.json" \
+"/host/fenced/fenced" exec story-setup window \
+  "/host/workspace/stories/rv-123-example/setup.json" \
+  --workspace-root "/host/workspace" \
   --session review --window rv-example
 ```
 

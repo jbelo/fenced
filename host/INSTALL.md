@@ -142,9 +142,10 @@ state. The [profile schema](SPEC.md#setup-inputs) remains supported for custom
 images, service enrollment and multiple isolated environments. Existing ownership,
 conflict, mount and credential checks still apply.
 
-For a review, give meta the Shortcut story and PR references. The setup skills
-also require the private workspace template and the requested host tmux session;
-these remain separately prepared prerequisites. Review its generated request and
+For a review, give meta the Shortcut story and PR references. Select the copied private workspace template once with
+`~/fenced/fenced template "$HOME/memty"` (on Mac, use its actual path, such as
+`$HOME/personal/memty`). New sessions mount it read-only at `$HOME/memty` in the
+container. The requested host tmux session must also exist. Review its generated request and
 run the returned host-side command through the launcher:
 
 ```sh

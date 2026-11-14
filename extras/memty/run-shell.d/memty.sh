@@ -1,3 +1,13 @@
+# Profile launches use only the explicit host-local setting; legacy defaults remain.
+if [[ "${FENCED_PROFILE_LAUNCH:-0}" == 1 ]]; then
+  memty_helper="$launcher_dir/../extras/memty/host-bin/fenced-memty"
+  if [[ ! -f "$memty_helper" ]]; then
+    memty_helper=$(command -v fenced-memty) || { echo 'error: Memty host helper unavailable' >&2; exit 1; }
+  fi
+  MEMTY_SOURCE=$("$memty_helper" --source) || exit 1
+  MEMTY_ENABLE=0
+  [[ -z "$MEMTY_SOURCE" ]] || MEMTY_ENABLE=1
+fi
 # Sourced by run-shell; keep template integration in the extra.
 if [[ "${MEMTY_ENABLE:-1}" != 0 ]]; then
   memty_source=${MEMTY_SOURCE:-"$HOME/personal/memty"}

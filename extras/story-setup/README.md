@@ -130,3 +130,17 @@ Credentials and optional private templates require separate operator enrollment.
 The handoff is tested with local Git fixtures on Ubuntu 24.04 ARM64 and Ubuntu
 26.04 AMD64. Ubuntu 26.04 ARM64 revalidation and external authenticated fetch
 remain separate validation requirements.
+
+## Profile-session host paths
+
+`fenced meta` and `fenced story` expose `FENCED_HOST_WORKSPACE` and
+`FENCED_HOST_CHECKOUT` as path metadata inside the container. Setup skills use
+these values to produce a host command via the selected checkout's
+`fenced exec story-setup`, always supplying `--workspace-root`. This does not mount
+the host checkout or provide host credentials. Legacy launchers supply the workspace
+mapping; when checkout metadata is absent, the skill asks for the host command
+environment instead of assuming ~/.local/bin or ~/exoscale.
+
+Select the private template with `fenced template /host/path/to/memty` before
+starting a new profile session. See [Memty](../memty/README.md) for the read-only
+mount and host-specific paths. No template copy into the agent home is required.

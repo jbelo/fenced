@@ -27,7 +27,7 @@ Image additions are separate from services: OpenSSL adds development libraries,
 FoundationDB adds clients, and Redpanda adds `rpk`. `go-agent-java` adds Java 25;
 `go-agent-all` combines these tools with the Java runtime, Terraform 1.11.4, and OpenBao 2.7.1 `bao`, without Clojure tooling.
 Check tool availability before assuming it exists.
-When the host Memty template is available, standard shell launchers mount it; `$HOME/memty` is a read-only host template.
+When configured by the operator, profile-aware launchers mount the host Memty template; `$HOME/memty` is a read-only host template.
 Read its guidance and copy only needed template content into an authorized
 writable story directory, preserving existing files. It contains project-specific
 references and skills, not just empty templates. Report a missing mount to the
@@ -45,3 +45,7 @@ With a host-managed gateway profile, `agent-gateway:8080` is the profile-local
 endpoint. A running agent session may outlive a stopped gateway; report
 unavailability to the host operator. Provider credentials and policy remain
 outside the agent. Readiness does not establish provider authentication.
+
+Story setup sessions expose `FENCED_HOST_WORKSPACE` and, for profile launches,
+`FENCED_HOST_CHECKOUT` as host-path metadata for exact host handoff commands.
+These paths do not grant host access; follow the installed story setup skill.

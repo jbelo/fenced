@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Configure the optional host-local Memty mount for profile launches."""
+import argparse
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+
+
+def setting_file():
+    return Path.home() / '.config/fenced/memty.json'
+
+
+def validate(source):
+    path = Path(source).expanduser().resolve(strict=True)
+    if not path.is_dir() or any(c in str(path) for c in ',\n\r'):
+        raise ValueError('template must be a directory without commas or newlines')
+    for name in ('AGENTS.md', 'brief/STORY_TEMPLATE.md'):
+        if not (path / name).is_file() or not os.access(path / name, os.R_OK):
+            raise ValueError('template must contain readable ' + name)
+    return str(path)
+
+
+def read():
+    file = setting_file()
+    if file.is_symlink():
+        raise ValueError('template setting must not be a symlink')
+    if not file.exists():
+        return None
+    data = json.loads(file.read_text())
+    if not isinstance(data, dict) or set(data) != {'source'} or not (data['source'] is None or isinstance(data['source'], str)):
+        raise ValueError('invalid template setting')
+    return validate(data['source']) if data['source'] is not None else None
+
+
+def write(source):
+    file = setting_file()
+    if file.is_symlink() or file.parent.resolve() != file.parent.absolute():
+        raise ValueError('template setting path must not contain symlinks')
+    file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if file.parent.stat().st_uid != os.getuid() or file.parent.stat().st_mode & 0o077:
+        raise ValueError('configuration directory must be private and operator-owned')
+    fd, temporary = tempfile.mkstemp(prefix='.memty-', dir=file.parent)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            json.dump({'source': source}, stream)
+            stream.write('\n')
+        os.replace(temporary, file)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('path', nargs='?', help='template directory; omit to show the current setting')
+    parser.add_argument('--off', action='store_true', help='disable the mount for new profile sessions')
+    parser.add_argument('--source', action='store_true', help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    try:
+        if sum((args.path is not None, args.off, args.source)) > 1:
+            raise ValueError('choose a path, --off, or no arguments')
+        if args.source:
+            source = read()
+            if source:
+                print(source)
+            return 0
+        if args.path:
+            write(validate(args.path))
+        elif args.off:
+            write(None)
+        print(json.dumps({'source': read(), 'container_path': '/home/agent/memty',
+                          'read_only': True, 'takes_effect': 'new sessions'}, indent=2))
+        return 0
+    except (OSError, ValueError) as exc:
+        print('fenced template: ' + str(exc), file=sys.stderr)
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
