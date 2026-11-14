@@ -130,7 +130,7 @@ def main():
             if role=='agent':
                 versions=capture('run','--rm','--network=none','--read-only','--tmpfs','/tmp',
                     '--cap-drop=ALL','--security-opt=no-new-privileges','--entrypoint','sh',image_id,
-                    '-ec','git --version; tmux -V; go version; node --version; npm --version; codex --version; claude --version; rsync --version | head -1')
+                    '-ec','git --version; tmux -V; rg --version; fdfind --version; go version; node --version; npm --version; codex --version; claude --version; rsync --version | head -1')
                 (args.output/'agent-versions.txt').write_text(versions+'\n')
         report['complete']=True;save()
     print('Build complete: '+str(receipt))

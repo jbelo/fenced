@@ -55,6 +55,8 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     bash \
     vim \
+    ripgrep \
+    fd-find \
     xz-utils \
     libevent-core-2.1-7 \
     libtinfo6 \
@@ -67,7 +69,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=git-builder /usr/local /usr/local
-RUN tmux -V
+RUN tmux -V && rg --version && fdfind --version
 
 # Install Node 24 LTS
 ARG NODE_DIST_VERSION
