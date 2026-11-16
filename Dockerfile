@@ -111,3 +111,17 @@ RUN chmod 0755 /usr/local/bin/ssh
 # Template/story setup uses rsync to copy into writable workspaces.
 RUN apt-get update && apt-get install -y --no-install-recommends rsync \
     && rm -rf /var/lib/apt/lists/*
+
+# tuicr: pinned static release binaries for local terminal code review.
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      arm64) tuicr_arch=aarch64; tuicr_sha=94c0cc1672015bc41511657a81b4223596232372715d36131fd16f950b260313 ;; \
+      amd64) tuicr_arch=x86_64; tuicr_sha=48ba2ee347400a780756bc0c7726792a1a117b59d7920c10b0157bcf085b5128 ;; \
+      *) echo 'Unsupported tuicr architecture' >&2; exit 1 ;; \
+    esac; \
+    curl -fL --retry 3 "https://github.com/agavra/tuicr/releases/download/v0.29.0/tuicr-0.29.0-${tuicr_arch}-unknown-linux-musl.tar.gz" -o /tmp/tuicr.tar.gz; \
+    echo "${tuicr_sha}  /tmp/tuicr.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/tuicr.tar.gz -C /usr/local/bin tuicr; \
+    chmod 0755 /usr/local/bin/tuicr; \
+    rm /tmp/tuicr.tar.gz; \
+    tuicr --version

@@ -15,6 +15,10 @@ tools, tmux, persistent home directories, and controlled workspace and network
 access. `fenced meta` and `fenced story` open shells in this environment, where
 you run your coding agent.
 
+The base agent image includes [tuicr](https://tuicr.dev) 0.29.0 for terminal code
+review. Run `tuicr` in a local repository, or `tuicr --help` for options. Linux
+ARM64 and AMD64 release archives are checksum-verified during the image build.
+
 The host prepares the workspace and services; the harness controls what agents
 can access.
 
