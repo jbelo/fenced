@@ -6,20 +6,16 @@ available to the agent.
 
 ## Two parts of Fenced
 
-The **host environment**, or outer ring, provides pinned tools through Nix and
-manages Docker, configuration, credentials, and Git worktrees. `fenced shell`
+The **host tools**, or outer ring, provide pinned tools through Nix and
+manage Docker, configuration, credentials, and Git worktrees. `fenced shell`
 opens a shell with those tools and your normal host permissions.
 
 The **agent harness**, or inner ring, runs agents in containers with development
 tools, tmux, persistent home directories, and controlled workspace and network
-access. `fenced meta` and `fenced story` open shells in this environment, where
+access. `fenced meta` and `fenced story` open agent shells in containers, where
 you run your coding agent.
 
-The base agent image includes [tuicr](https://tuicr.dev) 0.29.0 for terminal code
-review. Run `tuicr` in a local repository, or `tuicr --help` for options. Linux
-ARM64 and AMD64 release archives are checksum-verified during the image build.
-
-The host prepares the workspace and services; the harness controls what agents
+The host prepares the workspace and services, the harness controls what agents
 can access.
 
 ## From a repository to a story
@@ -38,11 +34,27 @@ needed for that task.
     └── my-story/                 Story notes and Git worktrees
 ```
 
-You configure a Fenced **environment**: the workspace, agent image, access rules,
-persistent storage, and supporting services that Fenced commands operate on.
-The **image** supplies the container's operating system and development tools.
-A **profile** records the environment's configuration; the usual setup generates
-it from your choices.
+A Fenced **environment** is the reusable setup in which you run agent sessions.
+You configure it once so that each new session gets the same tools, workspace
+access, persistent agent home and supporting services without assembling those
+pieces again.
+
+For example, your development environment can connect:
+
+- `~/workspace`, exposed to agents at `/workspace`, with rules for which paths they can write;
+- an agent **image**, which supplies the operating system and installed tools;
+- Docker volumes for the agent's persistent home and Go module cache;
+- a Docker network and outbound proxy, plus any configured service extras.
+
+`fenced configure` records these choices. `fenced init` creates the configured
+volumes, networks and services. Later, `fenced meta` and `fenced story` create
+agent containers that use those resources. Exiting a session leaves the environment
+available for the next one, including its workspace files and persistent data.
+
+A **profile** is the configuration describing that setup; the usual configuration
+command generates it for you. Fenced also keeps ownership records for the Docker
+resources it creates. See [Configure once](host/INSTALL.md#configure-once) for
+where these files live and how to set up an environment.
 
 **Supporting services** run alongside agent containers. The outbound proxy
 controls Internet access; an optional gateway provides access to GitHub and
@@ -53,8 +65,11 @@ instructions for particular workflows.
 You open a **meta session** to work across the workspace and ask the agent to
 prepare the review. With the story-setup extra, it creates a request for you to
 apply on the host, where Git credentials and worktree operations live. You then
-open a **story session** focused on that task's directory. Both are agent shells
-in containers, using the same environment with different workspace write access.
+open a **story session** focused on that task's directory. Both sessions use the
+same environment's image, home, cache, network and services.
+The difference is their workspace access: the meta session can write to configured
+subdirectories such as `stories`, while the story session can write only to its
+selected story directory. Creating a story does not require a new environment.
 
 Sessions are temporary, but their work persists. Files remain in the host
 workspace; agent settings and credentials remain in a **persistent home** stored
