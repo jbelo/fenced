@@ -44,7 +44,7 @@ RUN set -eux; \
     esac; \
     curl -fL -o /tmp/foundationdb-clients.deb \
       "https://github.com/apple/foundationdb/releases/download/${FDB_VERSION}/foundationdb-clients_${FDB_VERSION}-1_${fdb_arch}.deb"; \
-    if [ -n "$FDB_SHA256" ]; then echo "$FDB_SHA256  /tmp/foundationdb-clients.deb" | sha256sum -c -; fi; \
+    if [ -n "${FDB_SHA256:-}" ]; then echo "$FDB_SHA256  /tmp/foundationdb-clients.deb" | sha256sum -c -; fi; \
     dpkg -i /tmp/foundationdb-clients.deb || apt-get install -y -f; \
     rm -f /tmp/foundationdb-clients.deb; \
     rm -rf /var/lib/apt/lists/*

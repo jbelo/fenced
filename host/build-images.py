@@ -41,7 +41,7 @@ def main():
     parser.add_argument('--agent-tag', required=True)
     parser.add_argument('--proxy-tag', required=True)
     parser.add_argument('--output', required=True, type=Path, help='new directory for source context, log and receipt')
-    parser.add_argument('--go-image', default='golang:1.27.3-bookworm')
+    parser.add_argument('--go-image', default='golang:1.27.4-bookworm')
     parser.add_argument('--debian-image', default='debian:12-slim')
     parser.add_argument('--inputs', type=Path, help='versioned base digest and tool input file')
     parser.add_argument('--apply', action='store_true', help='pull/build; default only checks and prints plan')
@@ -62,7 +62,7 @@ def main():
         bases = inputs['platforms'][arch]
         for key in ('go','debian'):
             require(re.fullmatch(r'[A-Za-z0-9./_-]+@sha256:[0-9a-f]{64}', bases[key]), 'inputs require immutable base digests')
-        require(args.go_image == 'golang:1.27.3-bookworm' and args.debian_image == 'debian:12-slim', 'do not combine input file with base overrides')
+        require(args.go_image == 'golang:1.27.4-bookworm' and args.debian_image == 'debian:12-slim', 'do not combine input file with base overrides')
         args.go_image, args.debian_image = bases['go'], bases['debian']
         build_args = dict(inputs['build_args'], NODE_SHA256=bases['node_sha256'])
         require(set(build_args) == {'GIT_VERSION','GIT_SHA256','TMUX_VERSION','TMUX_SHA256','NODE_VERSION','CODEX_VERSION','CLAUDE_VERSION','DEBIAN_SNAPSHOT','NODE_DIST_VERSION','NODE_SHA256','LOCKED_NPM'}, 'unexpected build input fields')
