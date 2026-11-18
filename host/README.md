@@ -101,7 +101,8 @@ The agent image must provide Node, sh, stat and chown for isolated setup helpers
 Plan inspects resources without creating them. Init records ownership before
 creating volumes, networks and the proxy. Retain the private state directory:
 its receipt binds the profile, operator, Docker daemon and immutable image IDs.
-Configuration changes require explicit migration; existing unowned resources are
+Non-secret service-file updates use `fenced refresh-service --service NAME`;
+other configuration changes require explicit migration; existing unowned resources are
 never adopted. A completed installation with missing resources requires repair.
 
 Only empty volume roots can receive ownership changes. Managed references update

@@ -90,7 +90,7 @@ def start(h, p, docker, receipt, runtime, config, save):
         if not item:
             args = ['create','--pull=never','--name',spec['name'],'--network',p['network']['upstream'],
                     '--label',h.LABEL+'='+receipt['owner'],'--label',h.LABEL+'.role='+role,
-                    '--label',h.LABEL+'.config='+config,'--read-only','--cap-drop=ALL',
+                    '--label',h.LABEL+'.config='+receipt.get('resource_configs', {}).get(role, config),'--read-only','--cap-drop=ALL',
                     '--security-opt=no-new-privileges','--sysctl','net.ipv4.ip_forward=0',
                     '--sysctl','net.ipv6.conf.all.forwarding=0']
             for mount in spec['files']:
@@ -126,3 +126,79 @@ def verify_volumes(docker, runtime):
                         '--user','10001:10001','--mount',
                         'type=volume,src='+volume['name']+',target='+volume['target']+',readonly,volume-nocopy',
                         '--entrypoint',volume['probe'][0],volume['helper_image'],*volume['probe'][1:])
+
+
+def refresh_binding(h, old, new, key):
+    """Only the chosen service's non-secret file identities/content may change."""
+    import copy
+    expected = copy.deepcopy(old)
+    h.require(key in old.get('services', {}) and key in new.get('services', {}), 'unknown service')
+    before = expected['services'][key]['files']
+    after = new['services'][key]['files']
+    h.require(len(before) == len(after), 'service mount set changed')
+    for a, b in zip(before, after):
+        h.require(a['source'] == b['source'] and a['target'] == b['target'] and
+                  a['sha256'] is not None and b['sha256'] is not None,
+                  'only existing non-secret service files can be refreshed')
+    expected['services'][key]['files'] = after
+    h.require(expected == new, 'unrelated configuration changed; service refresh refused')
+
+
+def refresh(h, p, docker, receipt, binding, runtime, state, squid, key):
+    import copy
+    import fcntl
+    h.require(receipt and receipt.get('complete') and not receipt.get('stopped') and
+              not receipt.get('transition'), 'refresh requires a running initialized environment')
+    h.require(receipt['directory'] == str(state) and (state / 'squid.conf').read_bytes() == squid,
+              'state/proxy configuration changed')
+    path = state / 'receipt.json'
+    with (state / 'lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        h.require(h.read_json(path) == receipt, 'receipt changed during preflight')
+        refresh_binding(h, receipt['binding'], binding, key)
+        h.require(prepare(h, p, docker, h.capabilities()) == runtime['services'], 'service inputs changed during preflight')
+        pending = receipt.get('service_refresh')
+        role = 'service:' + key
+        config = receipt.get('infrastructure_config', h.digest(h.encoded(receipt['binding'])))
+        spec = runtime['services'][key]
+        if pending:
+            h.require(pending['service'] == key and pending['binding'] == binding,
+                      'pending refresh differs; restore its inputs and retry')
+        else:
+            h.inspect_resources(p, docker, receipt, config, receipt['binding'])
+            verify_clients(docker, {'images': runtime['images'], 'services': {key: spec}})
+            if receipt['binding'] == binding:
+                ready(h, docker, spec)
+                return {'refreshed': False, 'service': key}
+            pending = {'service': key, 'binding': binding, 'old_id': receipt['resources'][role]}
+            receipt['service_refresh'] = pending
+            receipt['infrastructure_config'] = config
+            h.atomic_json(path, receipt)
+        # On retry, inspect every unrelated resource with its original binding.
+        others = copy.deepcopy(receipt)
+        others['binding']['services'].pop(key)
+        h.inspect_resources(p, docker, others, config, others['binding'])
+        item = docker.inspect('container', spec['name'])
+        if item and item['Id'] == pending['old_id']:
+            labels = item['Config'].get('Labels', {})
+            h.require(labels.get(h.LABEL) == receipt['owner'] and labels.get(h.LABEL+'.role') == role and
+                      labels.get(h.LABEL+'.config') == receipt.get('resource_configs', {}).get(role, config),
+                      'old service ownership changed')
+            inspect(h, p, item, receipt['binding']['services'][key], True)
+            if item['State']['Running']:
+                docker.call('stop', '--time', '25', spec['name'])
+            docker.call('rm', spec['name'])
+        new_config = h.digest(h.encoded(spec))
+        receipt.setdefault('resource_configs', {})[role] = new_config
+        item = docker.inspect('container', spec['name'])
+        if item:
+            labels = item['Config'].get('Labels', {})
+            h.require(labels.get(h.LABEL) == receipt['owner'] and labels.get(h.LABEL+'.role') == role and
+                      labels.get(h.LABEL+'.config') == new_config, 'replacement service conflict')
+        h.atomic_json(path, receipt)
+        start(h, p, docker, receipt, {'services': {key: spec}}, config, lambda: h.atomic_json(path, receipt))
+        h.require(prepare(h, p, docker, h.capabilities()) == runtime['services'], 'service inputs changed during refresh')
+        receipt['binding'] = binding
+        receipt.pop('service_refresh')
+        h.atomic_json(path, receipt)
+        return {'refreshed': True, 'service': key, 'container': spec['name']}

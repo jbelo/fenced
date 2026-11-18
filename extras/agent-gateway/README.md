@@ -265,8 +265,8 @@ stopped without deleting evidence. Failed readiness never marks init complete.
 Containers run with read-only roots, dropped capabilities, no privilege escalation,
 forwarding disabled and no published ports. The gateway uses the profile's upstream
 network for provider requests and listens only on the internal network. Stop/start
-rechecks ownership, identity, mounts, topology and configuration. Changed images,
-config/policy files or profile settings require explicit migration; no automatic replacement,
+rechecks ownership, identity, mounts, topology and configuration. Changed images or profile settings require explicit migration;
+existing config/policy file contents can use the explicit refresh procedure below; no automatic replacement,
 credential enrollment/rotation, adoption of unrelated containers, or destructive cleanup is
 provided. Retain the original inputs when operating a profile; if they are lost or
 changed, inspect its receipt and arrange operator-led repair.
@@ -291,3 +291,30 @@ on the specified network and removes it afterward. Provider bodies and cursors
 stay in memory; the saved summary contains counts, head/image identities and
 check results. It does not enroll credentials, create policy or start the gateway.
 Omitted options retain the legacy verification defaults.
+
+
+### Update an existing gateway policy
+
+Back up the current policy and ownership receipt privately. Replace the policy at
+its existing path with operator-owned mode 0444, retaining the parent directory's
+0700 mode. Preserve its schema and existing entries; add exact repository names.
+Then run on the host:
+
+```sh
+fenced refresh-service --service agent-gateway
+fenced plan
+```
+
+Use `--profile` and `--state-dir` together when selecting a non-default environment.
+The command verifies ownership and replaces only the gateway container, retaining
+its configured address, alias, image, mounts and credential volume. Agent sessions,
+proxy, networks, home and cache remain intact. Gateway requests are briefly
+interrupted and existing pagination cursors may become invalid.
+
+Only changes to existing non-secret service files are allowed. Other input changes
+are rejected. Infrastructure keeps its original ownership fingerprint; the gateway
+gets its own configuration fingerprint. Ordinary commands still reject unapproved
+drift. An interrupted refresh is journaled: retain the candidate files and rerun
+the same command to resume. Inspect startup failures before retrying; do not delete
+receipts. Automatic rollback is not provided. Keep the candidate available until
+refresh completes; after completion, reverting the policy is another explicit refresh.

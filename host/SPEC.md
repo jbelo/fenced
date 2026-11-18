@@ -165,3 +165,14 @@ Read-only helper probes verify gateway UID access, and the service mounts the
 volume read-only. Receipts bind volume identity, not token contents; explicit
 stop/stage/check/start activates rotation without automatic restarts. Direct-host
 credential mounts require migration to a fresh volume-backed profile.
+
+
+### Explicit service-file refresh
+
+`refresh-service --service NAME --apply` accepts changed identities/checksums of
+existing non-secret files for one service only. The profile, operator, daemon,
+images, mounts, networks and external credential volume identity must match the
+receipt. It verifies existing ownership before replacement, retains infrastructure
+labels, records a service-specific configuration label and journals interruptions.
+Ordinary lifecycle calls reject incomplete refreshes. Retrying the same refresh
+resumes it; unrelated resources and active agent sessions are preserved.

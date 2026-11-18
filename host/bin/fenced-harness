@@ -303,7 +303,7 @@ def inspect_resources(p, docker, receipt, config, runtime, allow_stopped=False):
             labels = item['Config'].get('Labels', {}) if kind == 'container' else item.get('Labels', {})
             require(receipt and labels.get(LABEL) == receipt['owner'] and labels.get(LABEL + '.role') == role,
                     'unowned resource conflict: ' + resource)
-            require(labels.get(LABEL + '.config') == config, 'resource configuration conflict: ' + resource)
+            require(labels.get(LABEL + '.config') == receipt.get('resource_configs', {}).get(role, config), 'resource configuration conflict: ' + resource)
             identity = item.get('Id', item.get('Name'))
             recorded = receipt.get('resources', {}).get(role)
             require(not recorded or recorded == identity, 'resource identity changed: ' + resource)
@@ -340,7 +340,7 @@ def inspect_resources(p, docker, receipt, config, runtime, allow_stopped=False):
     return result
 
 
-def execute(p, checkout, state, apply=False, action="init"):
+def execute(p, checkout, state, apply=False, action="init", service=None):
     docker = Docker(p['runtime']['context'])
     bundle, squid = assets(checkout)
     extra_checks = check_extras(p, bundle)
@@ -357,7 +357,12 @@ def execute(p, checkout, state, apply=False, action="init"):
     require(not receipt_path.is_symlink() and not (state / 'squid.conf').is_symlink() and not (state / 'lock').is_symlink(),
             'state files cannot be symlinks')
     receipt = read_json(receipt_path) if receipt_path.exists() else None
+    if action == 'refresh-service':
+        require(apply and service, 'refresh-service requires --service and --apply')
+        return services.refresh(api(), p, docker, receipt, binding, runtime, state, squid, service)
     if receipt:
+        require(not receipt.get('service_refresh'), 'service refresh incomplete; rerun refresh-service')
+        config = receipt.get('infrastructure_config', config)
         require(receipt['binding'] == binding, 'profile, operator, daemon or image changed; explicit migration required')
         require(receipt['directory'] == str(state), 'receipt directory changed')
         require((not receipt.get('complete') and not (state / 'squid.conf').exists()) or
@@ -582,7 +587,7 @@ def launch_command(p, args, images):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['configure', 'validate', 'plan', 'init', 'launch', 'start', 'stop'])
+    parser.add_argument('action', choices=['configure', 'validate', 'plan', 'init', 'launch', 'start', 'stop', 'refresh-service'])
     parser.add_argument('--profile', help='advanced profile override; requires its own --state-dir')
     parser.add_argument('--workspace', help='configure: host workspace containing stories/')
     parser.add_argument('--image', help='configure: existing local agent image')
@@ -594,9 +599,11 @@ def main(argv=None):
     parser.add_argument('--no-tmux', action='store_true', help='launch a plain container shell')
     parser.add_argument('--source', help='Fenced checkout containing reference manifests and squid.conf')
     parser.add_argument('--state-dir', help='new private host directory for receipt and proxy config; parent must exist')
-    parser.add_argument('--apply', action='store_true', help='required with init/start/stop; plan is read-only')
+    parser.add_argument('--service', help='service to refresh after changing its mounted non-secret files')
+    parser.add_argument('--apply', action='store_true', help='required with init/start/stop/refresh-service; plan is read-only')
     args = parser.parse_args(argv)
     try:
+        require((args.action == 'refresh-service') == bool(args.service), '--service is required only for refresh-service')
         if args.action == 'configure':
             require(not args.apply, 'configure does not accept --apply')
             print(json.dumps(configure(args), indent=2))
@@ -615,16 +622,16 @@ def main(argv=None):
         if args.action == 'launch':
             # Validate story mount boundaries before any helper/container action.
             launch_command(p, args, {'agent': p['image']['reference']})
-        require(not args.apply or args.action in ('init','start','stop'), '--apply is only valid with init/start/stop')
+        require(not args.apply or args.action in ('init','start','stop','refresh-service'), '--apply is only valid with init/start/stop/refresh-service')
         if args.action == 'validate':
             result = {'valid': True, 'profile': p}
         else:
             require(args.source and args.state_dir, '--source and --state-dir are required')
-            require(args.action not in ('init','start','stop') or args.apply, 'init/start/stop require --apply; use plan to inspect first')
+            require(args.action not in ('init','start','stop','refresh-service') or args.apply, 'init/start/stop/refresh-service require --apply')
             state = Path(os.path.abspath(args.state_dir))
             require(not any(c in str(state) for c in ',:\n\r'), 'invalid state directory path')
             require(state.parent.is_dir() and state.parent.resolve() == state.parent, 'state parent must exist without symlink components')
-            result = execute(p, args.source, state, args.apply, args.action)
+            result = execute(p, args.source, state, args.apply, args.action, args.service)
         if args.action == 'launch':
             receipt = read_json(state / 'receipt.json')
             require(receipt.get('complete') and all(v['action'] == 'reuse' for v in result['resources']),
