@@ -188,6 +188,47 @@ reviewing code, push branches, open PRs or modify the Shortcut story.
 
 ## Pi handoff after verified completion
 
+### Enter the configured agent environment first
+
+The host tmux window is only a host shell. Do not tell the operator to run Pi
+there directly: Pi normally lives in the agent container's persistent home.
+After verification, provide an explicit host-to-container launch command before
+the Pi prompt. When FENCED_HOST_CHECKOUT and FENCED_HOST_WORKSPACE are known, use
+the configured launcher's `story` command with the absolute host story path:
+
+```sh
+"/host/fenced/fenced" story "/host/workspace/stories/rv-123-example"
+```
+
+Replace both paths using the session metadata and actual workspace. Prefer a
+single-line copyable command. Then label the following as an **inside the agent
+shell** command, not a host command:
+
+```sh
+pi
+```
+
+Do not launch either command yourself or send it into tmux. The operator launches
+the container, starts Pi, and pastes the briefing prompt below.
+
+Do not substitute bare `story-shell`, `run-shell`, or `fenced exec story-shell`
+for `fenced story` in a configured environment. `fenced exec` supplies pinned host
+tools; it is not the configured story-container entry point. Low-level launchers
+may select the legacy `go-agent-internal-net` rather than the configured profile's
+network. Do not infer the profile from Docker network names.
+
+If Pi is missing in the host shell, explain the host/container distinction rather
+than recommending apt installation, PATH edits, or a login-shell restart. If a
+launcher reports a missing default network, do not recommend `make egress-init`,
+proxy bypass, or new network provisioning as a workaround. First ensure the
+operator used `fenced story`. If that fails, request read-only diagnostics such
+as `fenced --help` and `fenced plan` (using the actual checkout launcher), and
+report the configuration blocker without rerunning story setup. If launcher
+metadata is missing, ask for the supported host launch command rather than
+guessing paths or falling back to a low-level launcher.
+
+### Briefing prompt
+
 After all setup checks above pass, include a ready-to-paste prompt for a new Pi
 session at the story workspace root. Read the workspace AGENTS.md and relevant
 setup references to tailor the prompt to the actual story number/title, repository
