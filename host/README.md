@@ -166,3 +166,33 @@ packages and lifecycle scripts disabled. Claude is linked directly to its
 integrity-verified native package; a missing or unusable binary fails the build. It does not execute the NodeSource setup
 script. Historical Debian metadata expiry is disabled for the snapshot; signature
 verification remains enabled. Upgrading inputs is an explicit reviewed change.
+
+## Upgrade an initialized environment's agent image
+
+For an explicit profile (including legacy `development.json`), build and verify
+an architecture-matched image first, then run:
+
+```sh
+fenced upgrade-agent --profile "$HOME/.config/fenced/development.json" \
+  --state-dir "$HOME/.local/state/fenced/development" --image NEW_IMAGE
+fenced plan
+```
+
+This resolves the image to an immutable ID, checks the existing environment and
+client tools, then updates only the profile's agent image and its receipt binding.
+Infrastructure ownership labels, service images, volumes and running sessions stay
+unchanged. A pending upgrade is journaled; retry the same command after interruption.
+Generated `development-profile.json` settings migration is not supported by this
+operation. Back up the profile and receipt before an upgrade. To roll back, select
+the previous image with the same command.
+
+New `fenced meta`/`fenced story` sessions use the new image. Existing sessions keep
+their original image until exited and relaunched; do not terminate an active agent
+without saving its work. Compiler-only updates can use
+`host/images/Dockerfile.go-upgrade` with an immutable `AGENT_IMAGE`; it replaces the
+entire Go installation from a digest-pinned upstream image while retaining the
+other agent tools. Normal fresh builds use the updated `host/image-inputs.json`.
+
+When using a raw local image ID as `AGENT_IMAGE`, use `DOCKER_BUILDKIT=0` for this
+compiler-only Dockerfile: BuildKit may interpret `sha256:...` as a registry tag.
+Verify the resulting image's Go version and existing extra tools before selecting it.

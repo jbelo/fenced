@@ -362,6 +362,7 @@ def execute(p, checkout, state, apply=False, action="init", service=None):
         return services.refresh(api(), p, docker, receipt, binding, runtime, state, squid, service)
     if receipt:
         require(not receipt.get('service_refresh'), 'service refresh incomplete; rerun refresh-service')
+        require(not receipt.get('agent_upgrade'), 'agent upgrade incomplete; rerun upgrade-agent')
         config = receipt.get('infrastructure_config', config)
         require(receipt['binding'] == binding, 'profile, operator, daemon or image changed; explicit migration required')
         require(receipt['directory'] == str(state), 'receipt directory changed')

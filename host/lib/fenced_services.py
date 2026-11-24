@@ -148,7 +148,7 @@ def refresh(h, p, docker, receipt, binding, runtime, state, squid, key):
     import copy
     import fcntl
     h.require(receipt and receipt.get('complete') and not receipt.get('stopped') and
-              not receipt.get('transition'), 'refresh requires a running initialized environment')
+              not receipt.get('transition') and not receipt.get('agent_upgrade'), 'refresh requires a running initialized environment')
     h.require(receipt['directory'] == str(state) and (state / 'squid.conf').read_bytes() == squid,
               'state/proxy configuration changed')
     path = state / 'receipt.json'

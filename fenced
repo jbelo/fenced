@@ -20,6 +20,7 @@ Usage: fenced COMMAND [ARGS...]
   template [PATH|--off]  Select or disable the read-only workspace template
   plan                   Inspect the environment without changes
   init                   Initialize its resources and start services
+  upgrade-agent --profile PATH --state-dir PATH --image IMAGE  Select a new agent image
   refresh-service --service NAME  Reload changed service files by replacing its container
   start|stop             Start or stop supporting services
   meta                   Enter the workspace-level agent container
@@ -39,7 +40,7 @@ HELP
 command=${1:---help}
 case "$command" in
   -h|--help|help) usage; exit 0 ;;
-  configure|template|shell|exec|doctor|validate|plan|init|launch|meta|story|start|stop|refresh-service) shift ;;
+  configure|template|shell|exec|doctor|validate|plan|init|launch|meta|story|start|stop|refresh-service|upgrade-agent) shift ;;
   *) printf 'Unknown command: %s\n' "$command" >&2; usage >&2; exit 2 ;;
 esac
 if [[ "$command" == exec && $# == 0 ]]; then
@@ -68,6 +69,7 @@ nix_args=(--extra-experimental-features 'nix-command flakes' develop --no-update
 case "$command" in
   shell) export PATH="$checkout:$PATH"; exec nix "${nix_args[@]}" ;;
   exec) exec nix "${nix_args[@]}" --command "$@" ;;
+  upgrade-agent) exec nix "${nix_args[@]}" --command python3 "$checkout/host/upgrade-agent.py" --source "$checkout" "$@" ;;
   template) exec nix "${nix_args[@]}" --command python3 "$checkout/extras/memty/host-bin/fenced-memty" "$@" ;;
   doctor) exec nix "${nix_args[@]}" --command fenced-doctor "$@" ;;
   meta|launch) exec nix "${nix_args[@]}" --command fenced-harness launch --source "$checkout" "$@" ;;

@@ -34,6 +34,26 @@ and error handling. Missing services/configuration are reported to the operator.
 Endpoint configuration is public client configuration, not gateway policy or
 credentials. The image must not receive gateway configuration, policy or secrets.
 
+## Local attachment update (2026-11-24)
+
+The local service and shared-home CLI use gateway revision
+`abc0718ca1c7bfb499c8795a8ca42c9ac7a29e15`. Existing agent images and the historical
+portable delivery below remain at their previous revisions. Use
+`$HOME/.local/bin/agentctl` explicitly in existing containers to select this update.
+
+```sh
+$HOME/.local/bin/agentctl github pr attachment --repo exoscale/kms --number 551 \
+  --asset-id UUID_FROM_CURRENT_DESCRIPTION --output ./new-attachment.png
+```
+
+`--output` is mandatory and must name a new file; existing files and symlinks are
+refused. Private GitHub-rendered PR-description PNG/JPEG/GIF/WebP images are supported
+up to 4 MiB (6 MiB response envelope for this operation). Comments, public/legacy
+URLs and other formats are unsupported. Authorization verifies the reference in the
+allowed PR, not the original uploading repository. See the installed skill for
+usage and error handling. This local development update needs no service restart
+or credential changes; rebuilding agent images is separate.
+
 ## Historical mock verification
 
 The following verifier requires a separate mock deployment; do not run it against
@@ -82,10 +102,10 @@ for sanitized live results and explicit remaining verification gaps.
 ## Existing containers without agentctl
 
 For an already-running read-only-root container, the operator can install the
-checksum-verified image CLI at `$HOME/.local/lib/agent-gateway/agentctl`, copy the
+gateway-delivered CLI at `$HOME/.local/lib/agent-gateway/agentctl`, copy the
 nonsecret agentctl.json to that directory as config.json, and install home-agentctl
 as `$HOME/.local/bin/agentctl`. The launcher supplies the fallback configuration
-when AGENTCTL_CONFIG is unset and uses /usr/local/bin/agentctl only when it matches the current delivered checksum.
+when AGENTCTL_CONFIG is unset and always uses the operator-updated home binary.
 Older image CLIs are bypassed by this home launcher.
 No provider credentials or server configuration are installed. Shared agenthome
 means the fallback is visible to other containers using that volume; it is writable
