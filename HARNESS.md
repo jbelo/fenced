@@ -203,6 +203,28 @@ Changes made inside the agent home are not copied back to the repository;
 update `config/tmux.conf` to keep the defaults you want restored in the future.
 No image rebuild is needed for this installation step.
 
+The base image bundles pinned Git checkouts of TPM, tmux-resurrect and
+tmux-continuum under `/opt/tmux-plugins/` (revisions are in `Dockerfile`).
+The default configuration loads them directly from the image; no plugin mount,
+copy into the home volume, or runtime Internet access is required. Rebuild the
+image to update plugins; TPM's online install/update/remove shortcuts are not
+supported against this image-owned directory.
+
+Resurrect stores session files in `~/.tmux/resurrect/` on the persistent agent
+home. Continuum saves every 15 minutes while its status-line hook runs and restores
+on tmux server startup, not on configuration reload. Keep the status bar enabled
+and TPM initialization after all status/theme settings. With the default prefix,
+`Ctrl-b Ctrl-s` saves manually and `Ctrl-b Ctrl-r` restores. These restore tmux
+layout and supported commands, not running process memory or agent conversations.
+No Vim/Neovim session integration is configured.
+
+Existing home volumes retain their current `.tmux.conf`; rebuilding the image or
+running `make install-agent-tmux` does not merge this configuration into them.
+Updating an existing home and installing into already-running containers are
+separate operator actions. Concurrent harnesses sharing a home also share this
+save directory; use distinct `@resurrect-dir` paths when their sessions must remain
+independent.
+
 When nesting agent tmux inside host tmux, keep `set -s set-clipboard on` in
 the **host's** `~/.tmux.conf` so clipboard requests can reach your terminal app.
 The agent default also uses `on`, forwarding clipboard requests from applications

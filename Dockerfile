@@ -43,6 +43,24 @@ RUN curl -fL "https://github.com/tmux/tmux/releases/download/${TMUX_VERSION}/tmu
     make install && \
     rm -rf /tmp/tmux.tar.gz "/tmp/tmux-${TMUX_VERSION}"
 
+# Bundle pinned Git checkouts; runtime agents load plugins without network access.
+FROM git-builder AS tmux-plugins
+RUN set -eu; \
+    mkdir -p /opt/tmux-plugins; \
+    for entry in \
+      tpm:e261deb1b47614eed3400089ce7197dc68acc4eb \
+      tmux-resurrect:cff343cf9e81983d3da0c8562b01616f12e8d548 \
+      tmux-continuum:0698e8f4b17d6454c71bf5212895ec055c578da0; do \
+      plugin="${entry%%:*}"; revision="${entry#*:}"; \
+      destination="/opt/tmux-plugins/$plugin"; \
+      git init "$destination"; \
+      git -C "$destination" remote add origin "https://github.com/tmux-plugins/$plugin.git"; \
+      git -C "$destination" fetch --depth 1 origin "$revision"; \
+      git -C "$destination" checkout --detach FETCH_HEAD; \
+      test "$(git -C "$destination" rev-parse HEAD)" = "$revision"; \
+    done; \
+    chmod -R a+rX /opt/tmux-plugins
+
 FROM ${GO_IMAGE}
 ARG DEBIAN_SNAPSHOT
 COPY host/images/apt-snapshot.sh /tmp/fenced-apt-snapshot.sh
@@ -69,6 +87,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=git-builder /usr/local /usr/local
+COPY --from=tmux-plugins /opt/tmux-plugins /opt/tmux-plugins
 RUN tmux -V && rg --version && fdfind --version
 
 # Install Node 24 LTS
